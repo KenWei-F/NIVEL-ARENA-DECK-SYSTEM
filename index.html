@@ -2,7 +2,7 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NIVEL ARENA DECK SYSTEM</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
@@ -12,11 +12,16 @@
         body { 
             background-color: #191919; 
             color: #ffffff; 
+            /* 使用 dvh 確保填滿實際可視高度，防止被瀏覽器工具列遮擋 */
+            height: 100dvh;
             overflow: hidden; 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            -webkit-tap-highlight-color: transparent;
         }
-        ::-webkit-scrollbar { width: 5px; }
+        /* PC版滾動條樣式 */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-thumb { background: #373737; border-radius: 10px; }
+        ::-webkit-scrollbar-track { background: transparent; }
         
         .notion-panel { background-color: #202020; border: 1px solid #2f2f2f; border-radius: 4px; }
         .secondary-block { background-color: #2d2d30; border: 1px solid #3a3a3a; border-radius: 4px; }
@@ -32,12 +37,18 @@
         .count-ctrl-btn.plus:hover { background: #22c55e; color: white; }
         .leader-remove-btn { width: 29px !important; height: 29px !important; font-size: 18px !important; }
         
+        /* PC: 固定寬度 */
         .card-fixed-size { width: 100px; min-width: 100px; }
         .leader-fixed-size { width: 180px; min-width: 180px; }
+        
+        @media (max-width: 768px) {
+            /* Mobile: 寬度由 Grid 控制，保持比例 */
+            .card-fixed-size { width: 100%; min-width: 0; aspect-ratio: 250/350; }
+            .leader-fixed-size { width: 100px; min-width: 100px; }
+        }
 
         .filter-label { font-size: 10px; font-weight: bold; color: #737373; text-transform: uppercase; margin: 10px 0 5px; display: block; letter-spacing: 0.05em; }
         .checkbox-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #d4d4d4; padding: 2px 0; }
-        .checkbox-item:hover { color: #ffffff; }
         input[type="checkbox"] { accent-color: #ef4444; width: 13px; height: 13px; cursor: pointer; }
 
         .notion-select { width: 100%; background-color: #2d2d30; border: 1px solid #3a3a3a; color: #d4d4d4; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none; cursor: pointer; }
@@ -48,7 +59,7 @@
         .nav-btn {
             display: flex; align-items: center; gap: 6px;
             padding: 5px 12px; border-radius: 4px; border: 1px solid #3a3a3a;
-            background-color: #2d2d30; color: #d4d4d4;
+            background-color: #2d2d30; color: #d4d4d4; white-space: nowrap; 
             font-size: 11px; font-weight: 700; transition: all 0.2s; cursor: pointer;
         }
         .nav-btn:hover { background-color: #3a3a3a; color: #ffffff; border-color: #4a4a4a; }
@@ -56,7 +67,7 @@
         .nav-btn-danger:hover { background-color: rgba(239, 68, 68, 0.1); border-color: #ef4444; }
         
         .nav-group-label { font-size: 9px; font-weight: 900; color: #505050; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 2px; }
-        .nav-divider { width: 1px; height: 28px; background-color: #2f2f2f; margin: 0 10px; align-self: center; }
+        .nav-divider { width: 1px; height: 28px; background-color: #2f2f2f; margin: 0 10px; align-self: center; flex-shrink: 0; }
 
         .panel-title { font-size: 12px; font-weight: 900; color: #d1d5db; text-transform: uppercase; letter-spacing: 0.15em; }
 
@@ -69,15 +80,28 @@
             border-color: #3a3a3a !important;
         }
         .custom-select-arrow { position: absolute; right: 10px; pointer-events: none; font-size: 8px; color: #737373; }
-
-        .search-input::placeholder { color: #505050; opacity: 1; }
         
         @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        
         .modal-content { animation: modalFadeIn 0.2s ease-out; }
+        .mobile-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 
         .version-tag { background: #3f3f46; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; }
-        
         .pie-circle { transition: stroke-dasharray 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+
+        .fab {
+            position: fixed; bottom: 24px; right: 24px;
+            width: 56px; height: 56px; border-radius: 50%;
+            background: #ef4444; color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 40; cursor: pointer; transition: transform 0.2s;
+        }
+        .fab:active { transform: scale(0.95); }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body>
@@ -107,67 +131,81 @@
             "黃": { name: "雷霆", icon: "images/Icon/ico_yellow.png" }
         };
 
-        const AboutModal = ({ onClose }) => {
-            return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={onClose}>
-                    <div className="modal-content w-[600px] bg-[#1c1c1c] border border-[#2f2f2f] rounded shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-                        <div className="bg-[#202020] px-5 py-4 border-b border-[#2f2f2f] flex justify-between items-center">
-                            <span className="panel-title text-sm">關於本工具 (ABOUT)</span>
-                        </div>
-                        <div className="p-8 space-y-8 overflow-y-auto max-h-[80vh]">
-                            <div className="space-y-4 text-[13px] text-zinc-200 leading-relaxed text-justify">
-                                <p>NIVEL ARENA DECK SYSTEM 是專為 NA TCG 玩家所開發的卡牌構築工具，旨在提供快速、直覺的牌組建立與查看。</p>
-                                <p>本人非程式專業，此工具完全依靠 AI 來製作，如有任何問題與建議歡迎聯繫我。</p>
-                                <p>卡牌資料的部分非常感謝<span className="font-bold text-white">儀內</span>的協助，也很感謝他製作了 NIVEL ARENA 繁中資料庫，有這些資料才能讓本工具開發順利。</p>
+        const ModalOverlay = ({ children, onClose, title, isMobile }) => (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={onClose} style={{padding: isMobile ? 0 : '1rem'}}>
+                <div 
+                    className={`bg-[#1c1c1c] border border-[#2f2f2f] shadow-2xl overflow-hidden flex flex-col 
+                    ${isMobile 
+                        ? 'mobile-slide-up w-full absolute bottom-0 rounded-t-xl rounded-b-none border-b-0 h-[85dvh]' 
+                        : 'modal-content w-[600px] max-h-[90vh] rounded' 
+                    }`} 
+                    onClick={e => e.stopPropagation()}
+                >
+                    <div className="bg-[#202020] px-5 py-4 border-b border-[#2f2f2f] flex justify-between items-center flex-shrink-0">
+                        <span className="panel-title text-sm">{title}</span>
+                        <button onClick={onClose} className="text-zinc-400 font-bold p-2 hover:text-white">✕</button>
+                    </div>
+                    {/* 增加底部 padding 以適應手機 */}
+                    <div className="overflow-y-auto flex-1 h-full pb-10"> 
+                        {children}
+                    </div>
+                </div>
+            </div>
+        );
+
+        /* [修正] 完全還原原始的 AboutContent 文本內容與結構 */
+        const AboutContent = () => (
+            <div className="p-8 space-y-8 pb-20">
+                <div className="space-y-4 text-[13px] text-zinc-200 leading-relaxed text-justify">
+                    <p>NIVEL ARENA DECK SYSTEM 是專為 NA TCG 玩家所開發的卡牌構築工具，旨在提供快速、直覺的牌組建立與查看。</p>
+                    <p>本人非程式專業，此工具完全依靠 AI 來製作，如有任何問題與建議歡迎聯繫我。</p>
+                    <p>卡牌資料的部分非常感謝<span className="font-bold text-white">儀內</span>的協助，也很感謝他製作了 NIVEL ARENA 繁中資料庫，有這些資料才能讓本工具開發順利。</p>
+                </div>
+                <div className="pl-4 border-l-2 border-white/80 py-1 text-[12px] text-white/90 leading-relaxed">
+                    本工具所使用的資料皆來自繁中資料庫與官網，所有圖片、角色、文字內容之著作權均屬原始權利者所有，如有侵權疑慮請來信告知。
+                </div>
+                <div>
+                    <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">版本更新 (CHANGELOG)</h4>
+                    <div className="space-y-2 pl-1">
+                        <div className="flex justify-between items-center text-[12px] text-zinc-300">
+                            <div className="flex items-center gap-2">
+                                <span className="version-tag">v0.9</span>
+                                <span>工具發布</span>
                             </div>
-                            <div className="pl-4 border-l-2 border-white/80 py-1 text-[12px] text-white/90 leading-relaxed">
-                                本工具所使用的資料皆來自繁中資料庫與官網，所有圖片、角色、文字內容之著作權均屬原始權利者所有，如有侵權疑慮請來信告知。
-                            </div>
-                            <div>
-                                <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">版本更新 (CHANGELOG)</h4>
-                                <div className="space-y-2 pl-1">
-                                    <div className="flex justify-between items-center text-[12px] text-zinc-300">
-                                        <div className="flex items-center gap-2">
-                                            <span className="version-tag">v0.9</span>
-                                            <span>工具發布</span>
-                                        </div>
-                                        <span className="text-zinc-500 font-mono">2026/02/17</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div>
-                                <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">開發者資訊 (CONTACT)</h4>
-                                <div className="grid grid-cols-2 gap-4 text-[12px]">
-                                    <div className="flex flex-col gap-1">
-                                        <span className="text-zinc-500">Email</span>
-                                        <span className="text-zinc-200 font-mono select-all">a638485788@gmail.com</span>
-                                    </div>
-                                    <div className="flex flex-col gap-1">
-                                        <span className="text-zinc-500">Discord</span>
-                                        <span className="text-zinc-200 font-mono select-all">kenwei</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div>
-                                <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">相關連結 (LINKS)</h4>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <a href="http://nivelarena.co.kr/" target="_blank" className="nav-btn justify-center h-9 bg-[#202020] hover:bg-[#2d2d30] border-[#3a3a3a] text-zinc-300">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-                                        Nivel Arena 官網
-                                    </a>
-                                    <a href="https://cake-forger-f35.notion.site/NIVEL-ARENA-20e969c79e03804cae50c7acd1f2662b" target="_blank" className="nav-btn justify-center h-9 bg-[#202020] hover:bg-[#2d2d30] border-[#3a3a3a] text-zinc-300">
-                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
-                                        繁中資料庫
-                                    </a>
-                                </div>
-                            </div>
+                            <span className="text-zinc-500 font-mono">2026/02/17</span>
                         </div>
                     </div>
                 </div>
-            );
-        };
+                <div>
+                    <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">開發者資訊 (CONTACT)</h4>
+                    <div className="grid grid-cols-2 gap-4 text-[12px]">
+                        <div className="flex flex-col gap-1">
+                            <span className="text-zinc-500">Email</span>
+                            <span className="text-zinc-200 font-mono select-all">a638485788@gmail.com</span>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                            <span className="text-zinc-500">Discord</span>
+                            <span className="text-zinc-200 font-mono select-all">kenwei</span>
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">相關連結 (LINKS)</h4>
+                    <div className="grid grid-cols-2 gap-3">
+                        <a href="http://nivelarena.co.kr/" target="_blank" className="nav-btn justify-center h-9 bg-[#202020] hover:bg-[#2d2d30] border-[#3a3a3a] text-zinc-300">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                            Nivel Arena 官網
+                        </a>
+                        <a href="https://cake-forger-f35.notion.site/NIVEL-ARENA-20e969c79e03804cae50c7acd1f2662b" target="_blank" className="nav-btn justify-center h-9 bg-[#202020] hover:bg-[#2d2d30] border-[#3a3a3a] text-zinc-300">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                            繁中資料庫
+                        </a>
+                    </div>
+                </div>
+            </div>
+        );
 
-        const StatsBlock = ({ stats }) => {
+        const StatsBlock = ({ stats, isMobile }) => {
             const maxVal = Math.max(...Object.values(stats.cost), 1);
             const total = (stats.type.Unit || 0) + (stats.type.Skill || 0) + (stats.type.Item || 0);
             
@@ -183,6 +221,54 @@
             const layer1Length = total > 0 ? 100 : 0; 
             const layer2Length = unitPct + skillPct; 
             const layer3Length = unitPct; 
+            
+            const [isCollapsed, setIsCollapsed] = useState(true);
+
+            if (isMobile) {
+                return (
+                    <div className="notion-panel flex flex-col bg-[#1c1c1c] mb-2 flex-shrink-0">
+                        <div className="h-10 px-4 bg-[#202020] flex items-center justify-between cursor-pointer" onClick={() => setIsCollapsed(!isCollapsed)}>
+                            <div className="flex items-center gap-2">
+                                <span className="panel-title">牌組數據</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                                <span className="text-[10px] text-zinc-400 font-mono">TRIG: {stats.trigger}/8</span>
+                                <span className="text-zinc-400 text-xs">{isCollapsed ? "▼" : "▲"}</span>
+                            </div>
+                        </div>
+                        {!isCollapsed && (
+                             <div className="flex-1 flex gap-4 px-5 py-4 items-center justify-around border-t border-[#2f2f2f]">
+                                <div className="flex flex-col gap-2 w-1/2">
+                                    <div className="flex items-end justify-between h-20 gap-1 pt-1 border-b border-zinc-800">
+                                        {Object.entries(stats.cost).map(([label, val]) => (
+                                            <div key={label} className="flex-1 flex flex-col h-full items-center">
+                                                <div className="h-4 flex items-center"><span className={`text-[9px] font-black tracking-tighter ${val > 0 ? 'text-zinc-400' : 'text-transparent'}`}>{val}</span></div>
+                                                <div className="flex-1 w-full relative flex items-end px-0.5">{val > 0 && <div className="w-full bg-zinc-100 rounded-t-[1px] shadow-sm" style={{ height: `${(val / maxVal) * 100}%` }}></div>}</div>
+                                                <div className="h-4 flex items-center"><span className="text-[8px] text-zinc-600 font-bold">{label === '1' ? '≤1' : label === '8' ? '≥8' : label}</span></div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div className="flex flex-col gap-2 items-center">
+                                    <div className="relative w-14 h-14">
+                                        <svg viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`} className="w-full h-full transform -rotate-90">
+                                            <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#27272a" strokeWidth="10" />
+                                            <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#3f3f46" strokeWidth="10" strokeDasharray={`${layer1Length} ${circumference}`} className="pie-circle" />
+                                            <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#a1a1aa" strokeWidth="10" strokeDasharray={`${layer2Length} ${circumference}`} className="pie-circle" />
+                                            <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#ffffff" strokeWidth="10" strokeDasharray={`${layer3Length} ${circumference}`} className="pie-circle" />
+                                        </svg>
+                                    </div>
+                                    <div className="flex flex-col gap-1 text-[9px] font-bold">
+                                         <div className="flex items-center gap-1 text-zinc-200"><div className="w-2 h-2 bg-white"></div> Unit: {stats.type.Unit}</div>
+                                         <div className="flex items-center gap-1 text-zinc-400"><div className="w-2 h-2 bg-[#a1a1aa]"></div> Skill: {stats.type.Skill}</div>
+                                         <div className="flex items-center gap-1 text-zinc-500"><div className="w-2 h-2 bg-[#3f3f46]"></div> Item: {stats.type.Item}</div>
+                                    </div>
+                                </div>
+                             </div>
+                        )}
+                    </div>
+                );
+            }
 
             return (
                 <div className="notion-panel flex-1 flex flex-col overflow-hidden bg-[#1c1c1c]">
@@ -207,27 +293,15 @@
                                 <div className="relative w-16 h-16">
                                     <svg viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`} className="w-full h-full transform -rotate-90">
                                         <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#27272a" strokeWidth="10" />
-                                        <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#3f3f46" strokeWidth="10" 
-                                                strokeDasharray={`${layer1Length} ${circumference}`} className="pie-circle" />
-                                        <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#a1a1aa" strokeWidth="10" 
-                                                strokeDasharray={`${layer2Length} ${circumference}`} className="pie-circle" />
-                                        <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#ffffff" strokeWidth="10" 
-                                                strokeDasharray={`${layer3Length} ${circumference}`} className="pie-circle" />
+                                        <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#3f3f46" strokeWidth="10" strokeDasharray={`${layer1Length} ${circumference}`} className="pie-circle" />
+                                        <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#a1a1aa" strokeWidth="10" strokeDasharray={`${layer2Length} ${circumference}`} className="pie-circle" />
+                                        <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#ffffff" strokeWidth="10" strokeDasharray={`${layer3Length} ${circumference}`} className="pie-circle" />
                                     </svg>
                                 </div>
                                 <div className="flex flex-col gap-1.5 text-[10px] font-bold">
-                                    <div className="flex items-center gap-2 text-zinc-200">
-                                        <div className="w-2.5 h-2.5 bg-white rounded-sm shadow-sm"></div>
-                                        <span>單位: <span className="text-white ml-0.5">{stats.type.Unit}</span></span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-zinc-400">
-                                        <div className="w-2.5 h-2.5 bg-[#a1a1aa] rounded-sm shadow-sm"></div>
-                                        <span>技能: <span className="text-[#d4d4d8] ml-0.5">{stats.type.Skill}</span></span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-zinc-500">
-                                        <div className="w-2.5 h-2.5 bg-[#3f3f46] rounded-sm shadow-sm border border-zinc-700"></div>
-                                        <span>道具: <span className="text-zinc-400 ml-0.5">{stats.type.Item}</span></span>
-                                    </div>
+                                    <div className="flex items-center gap-2 text-zinc-200"><div className="w-2.5 h-2.5 bg-white rounded-sm shadow-sm"></div><span>單位: <span className="text-white ml-0.5">{stats.type.Unit}</span></span></div>
+                                    <div className="flex items-center gap-2 text-zinc-400"><div className="w-2.5 h-2.5 bg-[#a1a1aa] rounded-sm shadow-sm"></div><span>技能: <span className="text-[#d4d4d8] ml-0.5">{stats.type.Skill}</span></span></div>
+                                    <div className="flex items-center gap-2 text-zinc-500"><div className="w-2.5 h-2.5 bg-[#3f3f46] rounded-sm shadow-sm border border-zinc-700"></div><span>道具: <span className="text-zinc-400 ml-0.5">{stats.type.Item}</span></span></div>
                                 </div>
                             </div>
                         </div>
@@ -265,6 +339,37 @@
             );
         };
 
+        const CardDetailContent = ({ card }) => (
+            <div className="p-4 space-y-5 pb-24">
+                <div className="rounded border border-[#2f2f2f] shadow-lg overflow-hidden bg-black/20 flex justify-center">
+                    <img src={card.image} className="max-w-full md:w-full h-auto" />
+                </div>
+                <div className="flex flex-col gap-2">
+                    <h2 className="text-xl font-bold text-white leading-tight break-words">{card.name}</h2>
+                    <div className="flex flex-wrap gap-1">{card.rarity?.map((r, i) => <span key={i} className="rarity-tag">{r}</span>)}</div>
+                    <p className="text-[10px] font-mono text-zinc-500 uppercase">{card.id}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold">
+                    {["attribute", "type", "cost", "power", "hit"].map(key => {
+                        const rawValue = card[key];
+                        const isValid = rawValue !== null && rawValue !== undefined && rawValue !== "";
+                        const displayValue = isValid ? rawValue : " - ";
+                        return (
+                            <div key={key} className="secondary-block p-2 flex justify-between items-center">
+                                <span className="text-zinc-400 uppercase">{key === "attribute" ? "屬性" : key === "type" ? "種類" : key === "cost" ? "cost" : key}</span>
+                                <div className="flex items-center gap-2 text-zinc-100">
+                                    {key === "attribute" && isValid ? (
+                                        <div className="flex items-center gap-1.5">{ATTR_MAP[rawValue] && <img src={ATTR_MAP[rawValue].icon} className="attr-icon" />}<span>{ATTR_MAP[rawValue]?.name || rawValue}</span></div>
+                                    ) : <span>{displayValue}</span>}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div className="space-y-1"><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">技能效果</p><div>{card.effects?.map((text, idx) => <HighlightedText key={idx} text={text} />)}</div></div>
+            </div>
+        );
+
         function App() {
             const [cardDatabase, setCardDatabase] = useState([]); 
             const [deck, setDeck] = useState([]);
@@ -281,16 +386,25 @@
             });
             const [selectedListValue, setSelectedListValue] = useState("");
             const [showAbout, setShowAbout] = useState(false);
+            
+            // --- Mobile States ---
+            const [showMobileDB, setShowMobileDB] = useState(false);
+            const [showMobileDetail, setShowMobileDetail] = useState(false);
+            const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
             useEffect(() => {
+                const handleResize = () => setIsMobile(window.innerWidth < 768);
+                window.addEventListener('resize', handleResize);
+                
                 fetch('./cards.json?v=' + Date.now())
                     .then(res => res.json())
                     .then(data => {
                         const arr = Array.isArray(data) ? data : [data];
                         setCardDatabase(arr);
-                        if(arr.length > 0) setSelectedCard(arr[0]);
+                        if(arr.length > 0 && !isMobile) setSelectedCard(arr[0]);
                     })
                     .catch(err => console.error("Data Load Error"));
+                return () => window.removeEventListener('resize', handleResize);
             }, []);
 
             useEffect(() => {
@@ -320,8 +434,6 @@
             const isTriggerValid = useMemo(() => deckStats.trigger <= 8, [deckStats.trigger]);
             const isSingleIdValid = useMemo(() => normalCardsInDeck.every(card => card.count <= 3), [normalCardsInDeck]);
             const isTotalCountValid = useMemo(() => totalCardsInDeck <= 40, [totalCardsInDeck]);
-            
-            // [FIX] 新增 IP 檢查邏輯
             const isIpValid = useMemo(() => {
                 const ips = new Set(deck.map(c => c.ip).filter(ip => ip !== undefined && ip !== null && ip !== ""));
                 return ips.size <= 1;
@@ -392,9 +504,7 @@
             };
 
             const addToDeck = (card) => {
-                // [FIX] 新增 40 張上限硬鎖，如果已經滿了且不是領袖，則不執行
                 if (card.type !== "領袖" && totalCardsInDeck >= 40) return;
-
                 setDeck(prev => {
                     if (card.type === "領袖") return [{ ...card, count: 1 }, ...prev.filter(i => i.type !== "領袖")];
                     const idx = prev.findIndex(i => i.id === card.id);
@@ -462,14 +572,41 @@
                 });
             };
 
+            const handleCardClick = (card, source) => {
+                setSelectedCard(card);
+                if (isMobile) {
+                    if (source === 'deck') {
+                         setShowMobileDetail(true);
+                    } else if (source === 'database') {
+                         addToDeck(card);
+                    }
+                }
+            };
+
+            const FilterSection = () => (
+                <div className="p-3 bg-[#202020] space-y-3 border-b border-[#2f2f2f] flex-shrink-0">
+                    <input type="text" placeholder="搜尋ID或卡名（ID 需要大寫）" className="w-full bg-[#2d2d30] border border-[#3a3a3a] p-2 rounded text-[11px] outline-none search-input" onChange={(e) => setSearch(e.target.value)} />
+                    <div className="space-y-4 max-h-[30vh] overflow-y-auto pr-1">
+                        <div className="grid grid-cols-2 gap-2">
+                            <select className="notion-select" value={filters.ip} onChange={(e) => setFilters(prev => ({...prev, ip: e.target.value}))}><option value="">全部 IP</option>{ipOptions.map(ip => <option key={ip} value={ip}>{ip}</option>)}</select>
+                            <select className="notion-select" value={filters.series} onChange={(e) => setFilters(prev => ({...prev, series: e.target.value}))}><option value="">全部系列</option>{seriesOptions.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                        </div>
+                        <div><span className="filter-label">種類</span><div className="grid grid-cols-4 gap-1">{['領袖', '單位', '技能', '道具'].map(t => (<label key={t} className="checkbox-item"><input type="checkbox" checked={filters.types.includes(t)} onChange={() => toggleFilter('types', t)} /> {t}</label>))}</div></div>
+                        <div><span className="filter-label">屬性</span><div className="flex flex-wrap gap-x-4 gap-y-2">{Object.keys(ATTR_MAP).map(a => (<label key={a} className="checkbox-item"><input type="checkbox" checked={filters.attributes.includes(a)} onChange={() => toggleFilter('attributes', a)} /><div className="flex items-center gap-1"><img src={ATTR_MAP[a].icon} className="attr-icon" /><span>{ATTR_MAP[a].name}</span></div></label>))}</div></div>
+                        <div><span className="filter-label">cost</span><div className="grid grid-cols-9 gap-1">{['0','1','2','3','4','5','6','7','8'].map(c => (<label key={c} className="checkbox-item"><input type="checkbox" checked={filters.costs.includes(c)} onChange={() => toggleFilter('costs', c)} /> {c === '8' ? '8+' : c}</label>))}</div></div>
+                        <div><span className="filter-label">Trigger</span><div className="flex gap-4"><label className="checkbox-item"><input type="checkbox" checked={filters.trigger === true} onChange={() => toggleFilter('trigger', true)} /> 有</label><label className="checkbox-item"><input type="checkbox" checked={filters.trigger === false} onChange={() => toggleFilter('trigger', false)} /> 無</label></div></div>
+                    </div>
+                </div>
+            );
+
             return (
-                <div className="flex flex-col h-screen p-2 gap-2" onDragOver={(e) => e.preventDefault()}>
-                    {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
+                <div className="flex flex-col h-[100dvh] p-2 gap-2 overflow-hidden w-screen">
+                    {showAbout && <ModalOverlay onClose={() => setShowAbout(false)} title="關於本工具 (ABOUT)" isMobile={isMobile}><AboutContent /></ModalOverlay>}
                     
                     <nav className="h-[68px] flex items-center px-4 justify-between notion-panel flex-shrink-0">
-                        <div className="flex items-center h-full w-full justify-between">
-                            <div className="flex items-center">
-                                <span className="text-[18px] font-black text-zinc-100 uppercase tracking-tighter mr-8 leading-none">NIVEL ARENA DECK SYSTEM</span>
+                        <div className="flex items-center h-full w-full justify-between overflow-x-auto no-scrollbar gap-4">
+                            <div className="flex items-center flex-shrink-0">
+                                <span className="text-[18px] font-black text-zinc-100 uppercase tracking-tighter mr-8 leading-none whitespace-nowrap">NIVEL ARENA DECK SYSTEM</span>
                                 <div className="flex h-full items-center">
                                     <div className="flex flex-col">
                                         <span className="nav-group-label">Local Files</span>
@@ -532,87 +669,63 @@
                                 </div>
                             </div>
                             
-                            <button onClick={() => setShowAbout(true)} className="nav-btn">
+                            <button onClick={() => setShowAbout(true)} className="nav-btn flex-shrink-0">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
                                 關於
                             </button>
                         </div>
                     </nav>
 
-                    <div className="flex flex-1 gap-2 overflow-hidden">
-                        <aside className="w-80 notion-panel flex flex-col overflow-hidden bg-[#1c1c1c]">
+                    <div className="flex flex-1 gap-2 overflow-hidden relative">
+                        <aside className="hidden md:flex w-80 notion-panel flex-col overflow-hidden bg-[#1c1c1c]">
                             <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌詳情 (DETAILS)</span></div>
                             <div className="flex-1 overflow-y-auto">
-                                {selectedCard && (
-                                    <div className="p-4 space-y-5">
-                                        <div className="rounded border border-[#2f2f2f] shadow-lg overflow-hidden bg-black/20"><img src={selectedCard.image} className="w-full" /></div>
-                                        <div className="flex flex-col gap-2">
-                                            <h2 className="text-xl font-bold text-white leading-tight break-words">{selectedCard.name}</h2>
-                                            <div className="flex flex-wrap gap-1">{selectedCard.rarity?.map((r, i) => <span key={i} className="rarity-tag">{r}</span>)}</div>
-                                            <p className="text-[10px] font-mono text-zinc-500 uppercase">{selectedCard.id}</p>
-                                        </div>
-                                        <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold">
-                                            {["attribute", "type", "cost", "power", "hit"].map(key => {
-                                                const rawValue = selectedCard[key];
-                                                const isValid = rawValue !== null && rawValue !== undefined && rawValue !== "";
-                                                const displayValue = isValid ? rawValue : " - ";
-                                                return (
-                                                    <div key={key} className="secondary-block p-2 flex justify-between items-center">
-                                                        <span className="text-zinc-400 uppercase">{key === "attribute" ? "屬性" : key === "type" ? "種類" : key === "cost" ? "cost" : key}</span>
-                                                        <div className="flex items-center gap-2 text-zinc-100">
-                                                            {key === "attribute" && isValid ? (
-                                                                <div className="flex items-center gap-1.5">{ATTR_MAP[rawValue] && <img src={ATTR_MAP[rawValue].icon} className="attr-icon" />}<span>{ATTR_MAP[rawValue]?.name || rawValue}</span></div>
-                                                            ) : <span>{displayValue}</span>}
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                        <div className="space-y-1"><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">技能效果</p><div>{selectedCard.effects?.map((text, idx) => <HighlightedText key={idx} text={text} />)}</div></div>
-                                    </div>
-                                )}
+                                {selectedCard && <CardDetailContent card={selectedCard} />}
                             </div>
                         </aside>
 
                         <main className="flex-1 flex flex-col gap-2 overflow-hidden" onDrop={handleDropMain} onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }} onDragLeave={() => setIsDraggingOver(false)}>
-                            <div className="flex gap-2 flex-shrink-0 items-stretch">
-                                <div className="notion-panel flex flex-col overflow-hidden bg-[#1c1c1c]"><div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">領袖 (LEADER)</span></div><div className="p-6 flex-1 flex items-center justify-center">
-                                    {leaderCard ? (<div className="relative group cursor-pointer leader-fixed-size" onClick={() => setSelectedCard(leaderCard)} onContextMenu={(e) => {e.preventDefault(); removeEntireStack(leaderCard.id);}}><img src={leaderCard.image} className="w-full rounded border border-[#2f2f2f] group-hover:border-red-500 shadow-md" /><div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40"><button onClick={(e) => {e.stopPropagation(); removeFromDeck(leaderCard.id);}} className="count-ctrl-btn leader-remove-btn">✕</button></div></div>) : <div className="leader-fixed-size py-20 text-zinc-700 text-[10px] uppercase font-bold tracking-widest italic text-center border-2 border-dashed border-zinc-800/50 rounded">尚未選擇領袖</div>}
-                                </div></div>
-                                <StatsBlock stats={deckStats} />
+                            <div className="flex flex-col md:flex-row gap-2 flex-shrink-0 items-stretch">
+                                <div className="notion-panel flex flex-col overflow-hidden bg-[#1c1c1c] md:w-auto w-full flex-shrink-0">
+                                    <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">領袖 (LEADER)</span></div>
+                                    <div className="p-4 md:p-6 flex-1 flex items-center justify-center">
+                                        {leaderCard ? (<div className="relative group cursor-pointer leader-fixed-size" onClick={() => handleCardClick(leaderCard, 'deck')} onContextMenu={(e) => {e.preventDefault(); removeEntireStack(leaderCard.id);}}><img src={leaderCard.image} className="w-full rounded border border-[#2f2f2f] group-hover:border-red-500 shadow-md" /><div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40"><button onClick={(e) => {e.stopPropagation(); removeFromDeck(leaderCard.id);}} className="count-ctrl-btn leader-remove-btn">✕</button></div></div>) : <div className="leader-fixed-size py-8 md:py-20 text-zinc-700 text-[10px] uppercase font-bold tracking-widest italic text-center border-2 border-dashed border-zinc-800/50 rounded">尚未選擇領袖</div>}
+                                    </div>
+                                </div>
+                                <StatsBlock stats={deckStats} isMobile={isMobile} />
                             </div>
 
                             <div className="notion-panel flex-1 flex flex-col overflow-hidden bg-[#1c1c1c]">
-                                <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center justify-between">
+                                <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center justify-between flex-shrink-0">
                                     <div className="flex items-center gap-3">
                                         <span className="panel-title">卡牌 (CARDS)</span>
                                         {!isDeckCompliant && (
                                             <div className="flex items-center gap-2 ml-4 py-0.5 px-3 bg-red-500/10 rounded border border-red-500/20">
-                                                <span className="text-[11px] font-black text-red-500 animate-pulse whitespace-nowrap">⚠️ 此牌組不符規定</span>
-                                                {!isOathValid && <span className="text-[10px] text-red-400 font-bold border-l border-red-500/30 pl-3 ml-1">必須根據隊長誓約配置牌組</span>}
-                                                {/* [FIX] 新增 IP 警告提示 */}
-                                                {!isIpValid && <span className="text-[10px] text-red-400 font-bold border-l border-red-500/30 pl-3 ml-1">牌組 IP 不可混搭</span>}
+                                                <span className="text-[11px] font-black text-red-500 animate-pulse whitespace-nowrap">⚠️ 不符規定</span>
+                                                {!isOathValid && <span className="hidden md:inline text-[10px] text-red-400 font-bold border-l border-red-500/30 pl-3 ml-1">誓約錯誤</span>}
+                                                {!isIpValid && <span className="hidden md:inline text-[10px] text-red-400 font-bold border-l border-red-500/30 pl-3 ml-1">IP 混搭</span>}
                                             </div>
                                         )}
                                     </div>
                                     <div className="text-[11px] font-bold text-zinc-500 tracking-wider">
-                                        卡牌數量: <span className={totalCardsInDeck > 40 ? 'text-red-500 animate-pulse' : 'text-zinc-200'}>{totalCardsInDeck}</span> <span className="text-zinc-600">/ 40</span>
+                                        數量: <span className={totalCardsInDeck > 40 ? 'text-red-500 animate-pulse' : 'text-zinc-200'}>{totalCardsInDeck}</span> <span className="text-zinc-600">/ 40</span>
                                     </div>
                                 </div>
                                 <div className="flex-1 p-5 overflow-y-auto bg-[#161618]">
-                                    {/* [FIX] 移除 justify-center，恢復由左至右 */}
-                                    <div className="flex flex-wrap gap-2 content-start min-h-full">
+                                    <div className="grid grid-cols-5 gap-1 md:flex md:flex-wrap md:gap-2 content-start min-h-full pb-32 md:pb-0"> 
                                         {normalCardsInDeck.map((item) => (
-                                            <div key={item.id} className="relative group cursor-pointer card-fixed-size" draggable="true" onDragStart={(e) => handleDragStart(e, item, 'deck')} onDragEnter={(e) => handleDragEnter(e, item.id)} onClick={() => setSelectedCard(item)} onContextMenu={(e) => { e.preventDefault(); removeEntireStack(item.id); }}>
-                                                <img src={item.image} className={`w-full rounded border ${item.attribute !== leaderCard?.attribute ? 'border-[3px] border-red-600 animate-pulse' : 'border-[#2f2f2f]'} group-hover:border-zinc-500 transition-all shadow-md`} />
-                                                <div className="absolute inset-0 flex items-end justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 pb-3">
+                                            <div key={item.id} className="relative group cursor-pointer card-fixed-size" draggable="true" onDragStart={(e) => handleDragStart(e, item, 'deck')} onDragEnter={(e) => handleDragEnter(e, item.id)} onClick={() => handleCardClick(item, 'deck')} onContextMenu={(e) => { e.preventDefault(); removeEntireStack(item.id); }}>
+                                                <img src={item.image} className={`w-full h-full object-cover rounded border ${item.attribute !== leaderCard?.attribute ? 'border-[3px] border-red-600 animate-pulse' : 'border-[#2f2f2f]'} group-hover:border-zinc-500 transition-all shadow-md`} />
+                                                
+                                                <div className="hidden md:flex absolute inset-0 items-end justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 pb-3">
                                                     <div className="flex items-center gap-2">
                                                         <button onClick={(e) => { e.stopPropagation(); removeFromDeck(item.id); }} className="count-ctrl-btn">–</button>
                                                         <div className={`bg-black/85 text-base font-black w-[34px] h-[34px] rounded-lg flex items-center justify-center shadow-lg border border-white/10 ${item.count > 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{item.count}</div>
                                                         <button onClick={(e) => { e.stopPropagation(); addToDeck(item); }} className="count-ctrl-btn plus">+</button>
                                                     </div>
                                                 </div>
-                                                <div className={`absolute -bottom-1 -right-1 bg-black/85 text-base font-black w-[34px] h-[34px] rounded-lg flex items-center justify-center shadow-2xl group-hover:hidden backdrop-blur-sm ${item.count > 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{item.count}</div>
+                                                
+                                                <div className={`absolute md:-bottom-1 md:-right-1 bottom-0 right-0 bg-black/85 text-[10px] md:text-base font-black w-4 h-4 md:w-[34px] md:h-[34px] rounded-tl md:rounded-lg flex items-center justify-center shadow-2xl md:group-hover:hidden backdrop-blur-sm border-t border-l border-white/10 md:border-none ${item.count > 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{item.count}</div>
                                             </div>
                                         ))}
                                     </div>
@@ -620,21 +733,9 @@
                             </div>
                         </main>
 
-                        <aside className="w-[460px] notion-panel flex flex-col overflow-hidden bg-[#1c1c1c]" onDrop={handleDropDatabase}>
+                        <aside className="hidden md:flex w-[460px] notion-panel flex-col overflow-hidden bg-[#1c1c1c]" onDrop={handleDropDatabase}>
                             <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌資料庫 (DATABASE)</span></div>
-                            <div className="p-3 border-b border-[#2f2f2f] bg-[#202020] space-y-3">
-                                <input type="text" placeholder="搜尋ID或卡名（ID 需要大寫）" className="w-full bg-[#2d2d30] border border-[#3a3a3a] p-2 rounded text-[11px] outline-none search-input" onChange={(e) => setSearch(e.target.value)} />
-                                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <select className="notion-select" value={filters.ip} onChange={(e) => setFilters(prev => ({...prev, ip: e.target.value}))}><option value="">全部 IP</option>{ipOptions.map(ip => <option key={ip} value={ip}>{ip}</option>)}</select>
-                                        <select className="notion-select" value={filters.series} onChange={(e) => setFilters(prev => ({...prev, series: e.target.value}))}><option value="">全部系列</option>{seriesOptions.map(s => <option key={s} value={s}>{s}</option>)}</select>
-                                    </div>
-                                    <div><span className="filter-label">種類</span><div className="grid grid-cols-4 gap-1">{['領袖', '單位', '技能', '道具'].map(t => (<label key={t} className="checkbox-item"><input type="checkbox" checked={filters.types.includes(t)} onChange={() => toggleFilter('types', t)} /> {t}</label>))}</div></div>
-                                    <div><span className="filter-label">屬性</span><div className="flex flex-wrap gap-x-4 gap-y-2">{Object.keys(ATTR_MAP).map(a => (<label key={a} className="checkbox-item"><input type="checkbox" checked={filters.attributes.includes(a)} onChange={() => toggleFilter('attributes', a)} /><div className="flex items-center gap-1"><img src={ATTR_MAP[a].icon} className="attr-icon" /><span>{ATTR_MAP[a].name}</span></div></label>))}</div></div>
-                                    <div><span className="filter-label">cost</span><div className="grid grid-cols-9 gap-1">{['0','1','2','3','4','5','6','7','8'].map(c => (<label key={c} className="checkbox-item"><input type="checkbox" checked={filters.costs.includes(c)} onChange={() => toggleFilter('costs', c)} /> {c === '8' ? '8+' : c}</label>))}</div></div>
-                                    <div><span className="filter-label">Trigger</span><div className="flex gap-4"><label className="checkbox-item"><input type="checkbox" checked={filters.trigger === true} onChange={() => toggleFilter('trigger', true)} /> 有</label><label className="checkbox-item"><input type="checkbox" checked={filters.trigger === false} onChange={() => toggleFilter('trigger', false)} /> 無</label></div></div>
-                                </div>
-                            </div>
+                            <FilterSection />
                             <div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-x-3 gap-y-2 bg-[#161618] content-start">
                                 {filteredCards.map(card => (
                                     <div key={card.id} className="group cursor-pointer flex flex-col items-center" 
@@ -653,6 +754,56 @@
                             </div>
                         </aside>
                     </div>
+
+                    <button className="md:hidden fab" onClick={() => setShowMobileDB(true)}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                    </button>
+
+                    {showMobileDB && (
+                        <ModalOverlay onClose={() => setShowMobileDB(false)} title="新增卡牌" isMobile={isMobile}>
+                            <FilterSection />
+                            <div className="p-4 grid grid-cols-4 gap-2 bg-[#161618] content-start pb-32">
+                                {filteredCards.map(card => (
+                                    <div key={card.id} className="relative cursor-pointer active:scale-95 transition-transform" onClick={() => handleCardClick(card, 'database')}>
+                                        <img src={card.image} className="w-full rounded border border-[#2f2f2f]" />
+                                        {deck.find(i=>i.id===card.id) && (
+                                            <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-bl flex items-center justify-center shadow">
+                                                {deck.find(i=>i.id===card.id).count}
+                                            </div>
+                                        )}
+                                        <div className="text-[9px] mt-1 text-center text-zinc-400 truncate">{card.name}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        </ModalOverlay>
+                    )}
+
+                    {showMobileDetail && selectedCard && (
+                        <ModalOverlay onClose={() => setShowMobileDetail(false)} title="卡牌詳情" isMobile={isMobile}>
+                            <div className="flex flex-col h-full">
+                                <div className="flex-1 overflow-y-auto">
+                                    <CardDetailContent card={selectedCard} />
+                                </div>
+                                <div className="p-4 bg-[#202020] border-t border-[#2f2f2f] flex items-center justify-between gap-4 flex-shrink-0 pb-10">
+                                    {deck.find(i => i.id === selectedCard.id) ? (
+                                        <>
+                                            <button onClick={() => removeFromDeck(selectedCard.id)} className="flex-1 bg-[#2d2d30] hover:bg-[#3a3a3a] text-white py-3 rounded font-bold flex items-center justify-center gap-2 active:bg-[#404040]">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg> 減少
+                                            </button>
+                                            <span className="text-xl font-black w-10 text-center">{deck.find(i => i.id === selectedCard.id).count}</span>
+                                            <button onClick={() => addToDeck(selectedCard)} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded font-bold flex items-center justify-center gap-2 active:bg-red-800">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 增加
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <button onClick={() => { addToDeck(selectedCard); setShowMobileDetail(false); }} className="w-full bg-red-600 text-white py-3 rounded font-bold active:bg-red-800">
+                                            加入牌組
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        </ModalOverlay>
+                    )}
                 </div>
             );
         }
