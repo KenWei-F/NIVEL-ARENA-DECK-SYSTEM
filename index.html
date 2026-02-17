@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NIVEL ARENA DECK SYSTEM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { 
+            background-color: #191919; 
+            color: #ffffff; 
+            overflow: hidden; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+        }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: #373737; border-radius: 10px; }
+        
+        .notion-panel { background-color: #202020; border: 1px solid #2f2f2f; border-radius: 4px; }
+        .secondary-block { background-color: #2d2d30; border: 1px solid #3a3a3a; border-radius: 4px; }
+        .effect-callout { padding: 12px; line-height: 1.6; font-size: 0.85rem; color: #e0e0e0; margin-bottom: 10px; }
+
+        .kw-badge { padding: 1px 6px; border-radius: 3px; font-weight: 700; margin: 0 2px; font-size: 0.75rem; color: #ffffff; display: inline-block; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
+        .rarity-tag { background-color: #ffffff; color: #191919; padding: 2px 8px; border-radius: 2px; font-size: 0.7rem; font-weight: 900; }
+        .attr-square { width: 14px; height: 14px; border-radius: 2px; border: 1px solid rgba(255,255,255,0.2); }
+        .plain-highlight { font-weight: 700; color: #ffffff; margin: 0 2px; }
+
+        .count-ctrl-btn { width: 19px; height: 19px; display: flex; align-items: center; justify-content: center; background: #ffffff; color: #191919; border-radius: 50%; font-size: 14px; font-weight: 900; transition: all 0.2s; border: none; cursor: pointer; }
+        .count-ctrl-btn:hover { background: #ef4444; color: white; transform: scale(1.1); }
+        .count-ctrl-btn.plus:hover { background: #22c55e; color: white; }
+        .leader-remove-btn { width: 29px !important; height: 29px !important; font-size: 18px !important; }
+        
+        .card-fixed-size { width: 100px; min-width: 100px; }
+        .leader-fixed-size { width: 180px; min-width: 180px; }
+
+        .filter-label { font-size: 10px; font-weight: bold; color: #737373; text-transform: uppercase; margin: 10px 0 5px; display: block; letter-spacing: 0.05em; }
+        .checkbox-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #d4d4d4; padding: 2px 0; }
+        .checkbox-item:hover { color: #ffffff; }
+        input[type="checkbox"] { accent-color: #ef4444; width: 13px; height: 13px; cursor: pointer; }
+
+        .notion-select { width: 100%; background-color: #2d2d30; border: 1px solid #3a3a3a; color: #d4d4d4; font-size: 11px; padding: 5px 8px; border-radius: 4px; outline: none; cursor: pointer; }
+
+        .attr-icon { width: 16px; height: 16px; object-fit: contain; }
+        .is-dragging { opacity: 0.2; transform: scale(0.9); }
+
+        .nav-btn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 5px 12px; border-radius: 4px; border: 1px solid #3a3a3a;
+            background-color: #2d2d30; color: #d4d4d4;
+            font-size: 11px; font-weight: 700; transition: all 0.2s; cursor: pointer;
+        }
+        .nav-btn:hover { background-color: #3a3a3a; color: #ffffff; border-color: #4a4a4a; }
+        .nav-btn-danger { color: #ef4444; border-color: rgba(239, 68, 68, 0.2); }
+        .nav-btn-danger:hover { background-color: rgba(239, 68, 68, 0.1); border-color: #ef4444; }
+        
+        .nav-group-label { font-size: 9px; font-weight: 900; color: #505050; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 2px; }
+        .nav-divider { width: 1px; height: 28px; background-color: #2f2f2f; margin: 0 10px; align-self: center; }
+
+        .panel-title { font-size: 12px; font-weight: 900; color: #d1d5db; text-transform: uppercase; letter-spacing: 0.15em; }
+
+        .custom-select-container { position: relative; display: flex; align-items: center; }
+        .custom-select { 
+            appearance: none; 
+            padding-right: 28px !important; 
+            background-image: none !important; 
+            background-color: #2d2d30 !important; 
+            border-color: #3a3a3a !important;
+        }
+        .custom-select-arrow { position: absolute; right: 10px; pointer-events: none; font-size: 8px; color: #737373; }
+
+        .search-input::placeholder { color: #505050; opacity: 1; }
+        
+        @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .modal-content { animation: modalFadeIn 0.2s ease-out; }
+
+        .version-tag { background: #3f3f46; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; }
+        
+        .pie-circle { transition: stroke-dasharray 0.4s cubic-bezier(0.25, 1, 0.5, 1); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        const DECK_LIST_FILES = [
+            "ST01.csv", "ST02.csv", "ST03.csv", "ST04.csv", "ST05.csv",
+            "ST06.csv", "ST07.csv", "ST08.csv", "ST09.csv", "ST10.csv", "ST11.csv"
+        ];
+
+        const KEYWORD_MAP = {
+            "入場": "#9a7b2c", "離場": "#606060", "攻擊者": "#ae4e4e", "防禦者": "#538a6a",
+            "主動": "#41679a", "被動": "#765a8d", "守護者": "#456f9b", "武裝": "#9a724b", 
+            "戰線構築": "#3a5e8c", "等級連結": "#76a366", "狂戰士": "#9c5436", 
+            "借貸": "#9d8329", "逃脫": "#478da2", "混合": "#a66085", 
+            "連鎖": "#b25656", "增幅": "#4a8c71", "Trigger": "#3f3f46"
+        };
+
+        const ATTR_MAP = {
+            "紅": { name: "火焰", icon: "images/icon/ico_red_m.png" },
+            "綠": { name: "大地", icon: "images/icon/ico_green_m.png" },
+            "紫": { name: "風暴", icon: "images/icon/ico_violet_m.png" },
+            "藍": { name: "波濤", icon: "images/icon/ico_blue.png" },
+            "黃": { name: "雷霆", icon: "images/icon/ico_yellow.png" }
+        };
+
+        const AboutModal = ({ onClose }) => {
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm" onClick={onClose}>
+                    <div className="modal-content w-[600px] bg-[#1c1c1c] border border-[#2f2f2f] rounded shadow-2xl overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="bg-[#202020] px-5 py-4 border-b border-[#2f2f2f] flex justify-between items-center">
+                            <span className="panel-title text-sm">關於本工具 (ABOUT)</span>
+                        </div>
+                        <div className="p-8 space-y-8 overflow-y-auto max-h-[80vh]">
+                            <div className="space-y-4 text-[13px] text-zinc-200 leading-relaxed text-justify">
+                                <p>NIVEL ARENA DECK SYSTEM 是專為 NA TCG 玩家所開發的卡牌構築工具，旨在提供快速、直覺的牌組建立與查看。</p>
+                                <p>本人非程式專業，此工具完全依靠 AI 來製作，如有任何問題與建議歡迎聯繫我。</p>
+                                <p>卡牌資料的部分非常感謝<span className="font-bold text-white">儀內</span>的協助，也很感謝他製作了 NIVEL ARENA 繁中資料庫，有這些資料才能讓本工具開發順利。</p>
+                            </div>
+                            <div className="pl-4 border-l-2 border-white/80 py-1 text-[12px] text-white/90 leading-relaxed">
+                                本工具所使用的資料皆來自繁中資料庫與官網，所有圖片、角色、文字內容之著作權均屬原始權利者所有，如有侵權疑慮請來信告知。
+                            </div>
+                            <div>
+                                <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">版本更新 (CHANGELOG)</h4>
+                                <div className="space-y-2 pl-1">
+                                    <div className="flex justify-between items-center text-[12px] text-zinc-300">
+                                        <div className="flex items-center gap-2">
+                                            <span className="version-tag">v0.9</span>
+                                            <span>工具發布</span>
+                                        </div>
+                                        <span className="text-zinc-500 font-mono">2026/02/17</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">開發者資訊 (CONTACT)</h4>
+                                <div className="grid grid-cols-2 gap-4 text-[12px]">
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-zinc-500">Email</span>
+                                        <span className="text-zinc-200 font-mono select-all">a638485788@gmail.com</span>
+                                    </div>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-zinc-500">Discord</span>
+                                        <span className="text-zinc-200 font-mono select-all">kenwei</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">相關連結 (LINKS)</h4>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <a href="http://nivelarena.co.kr/" target="_blank" className="nav-btn justify-center h-9 bg-[#202020] hover:bg-[#2d2d30] border-[#3a3a3a] text-zinc-300">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                        Nivel Arena 官網
+                                    </a>
+                                    <a href="https://cake-forger-f35.notion.site/NIVEL-ARENA-20e969c79e03804cae50c7acd1f2662b" target="_blank" className="nav-btn justify-center h-9 bg-[#202020] hover:bg-[#2d2d30] border-[#3a3a3a] text-zinc-300">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>
+                                        繁中資料庫
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const StatsBlock = ({ stats }) => {
+            const maxVal = Math.max(...Object.values(stats.cost), 1);
+            const total = (stats.type.Unit || 0) + (stats.type.Skill || 0) + (stats.type.Item || 0);
+            
+            const viewBoxSize = 42; 
+            const center = viewBoxSize / 2;
+            const radius = 15.9155; 
+            const circumference = 100;
+
+            const unitPct = total > 0 ? ((stats.type.Unit || 0) / total) * 100 : 0;
+            const skillPct = total > 0 ? ((stats.type.Skill || 0) / total) * 100 : 0;
+            const itemPct = total > 0 ? ((stats.type.Item || 0) / total) * 100 : 0;
+
+            const layer1Length = total > 0 ? 100 : 0; 
+            const layer2Length = unitPct + skillPct; 
+            const layer3Length = unitPct; 
+
+            return (
+                <div className="notion-panel flex-1 flex flex-col overflow-hidden bg-[#1c1c1c]">
+                    <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">牌組數據 (STATISTICS)</span></div>
+                    <div className="flex-1 flex gap-8 px-5 py-4 items-center">
+                        <div className="flex flex-col gap-2 min-w-[210px]">
+                            <div className="flex items-end gap-1.5"><span className="text-[10px] font-bold text-zinc-100 uppercase tracking-widest">費用分佈</span><span className="text-[9px] text-zinc-400 font-mono">COST</span></div>
+                            <div className="flex items-end justify-between h-24 gap-1.5 pt-1 border-b border-zinc-800">
+                                {Object.entries(stats.cost).map(([label, val]) => (
+                                    <div key={label} className="flex-1 flex flex-col h-full items-center">
+                                        <div className="h-4 flex items-center"><span className={`text-[10px] font-black tracking-tighter ${val > 0 ? 'text-zinc-400' : 'text-transparent'}`}>{val}</span></div>
+                                        <div className="flex-1 w-full relative flex items-end px-0.5">{val > 0 && <div className="w-full bg-zinc-100 rounded-t-[1px] shadow-sm transition-all duration-300" style={{ height: `${(val / maxVal) * 100}%` }}></div>}</div>
+                                        <div className="h-5 flex items-center"><span className="text-[8px] text-zinc-600 font-bold">{label === '1' ? '≤1' : label === '8' ? '≥8' : label}</span></div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div className="flex flex-col gap-2 items-center">
+                            <span className="text-[10px] font-bold text-zinc-200 uppercase tracking-widest">卡牌種類</span>
+                            <div className="flex items-center gap-4">
+                                <div className="relative w-16 h-16">
+                                    <svg viewBox={`0 0 ${viewBoxSize} ${viewBoxSize}`} className="w-full h-full transform -rotate-90">
+                                        <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#27272a" strokeWidth="10" />
+                                        <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#3f3f46" strokeWidth="10" 
+                                                strokeDasharray={`${layer1Length} ${circumference}`} className="pie-circle" />
+                                        <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#a1a1aa" strokeWidth="10" 
+                                                strokeDasharray={`${layer2Length} ${circumference}`} className="pie-circle" />
+                                        <circle r={radius} cx={center} cy={center} fill="transparent" stroke="#ffffff" strokeWidth="10" 
+                                                strokeDasharray={`${layer3Length} ${circumference}`} className="pie-circle" />
+                                    </svg>
+                                </div>
+                                <div className="flex flex-col gap-1.5 text-[10px] font-bold">
+                                    <div className="flex items-center gap-2 text-zinc-200">
+                                        <div className="w-2.5 h-2.5 bg-white rounded-sm shadow-sm"></div>
+                                        <span>單位: <span className="text-white ml-0.5">{stats.type.Unit}</span></span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-zinc-400">
+                                        <div className="w-2.5 h-2.5 bg-[#a1a1aa] rounded-sm shadow-sm"></div>
+                                        <span>技能: <span className="text-[#d4d4d8] ml-0.5">{stats.type.Skill}</span></span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-zinc-500">
+                                        <div className="w-2.5 h-2.5 bg-[#3f3f46] rounded-sm shadow-sm border border-zinc-700"></div>
+                                        <span>道具: <span className="text-zinc-400 ml-0.5">{stats.type.Item}</span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col justify-center gap-12">
+                            <div className="flex flex-col justify-center items-center min-w-[60px]">
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">Trigger</span>
+                                <div className="text-2xl font-black italic tracking-tighter">
+                                    <span className={stats.trigger > 8 ? 'text-red-500 animate-pulse' : 'text-zinc-100'}>{stats.trigger}</span>
+                                    <span className="text-zinc-600 text-sm mx-1">/</span>
+                                    <span className="text-zinc-600 text-sm">8</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const HighlightedText = ({ text }) => {
+            if (!text) return null;
+            const parts = text.split(/(【.*?】)/g);
+            return (
+                <div className="effect-callout secondary-block">
+                    {parts.map((part, i) => {
+                        const match = part.match(/【(.*?)】/);
+                        if (match) {
+                            const foundKey = Object.keys(KEYWORD_MAP).find(key => match[1].startsWith(key));
+                            if (foundKey) return <span key={i} className="kw-badge" style={{backgroundColor: KEYWORD_MAP[foundKey]}}>{part}</span>;
+                            return <span key={i} className="plain-highlight">{part}</span>;
+                        }
+                        return part;
+                    })}
+                </div>
+            );
+        };
+
+        function App() {
+            const [cardDatabase, setCardDatabase] = useState([]); 
+            const [deck, setDeck] = useState([]);
+            const [search, setSearch] = useState("");
+            const [selectedCard, setSelectedCard] = useState(null);
+            const [isDraggingOver, setIsDraggingOver] = useState(false);
+            const [draggingId, setDraggingId] = useState(null);
+            const [draggedItemData, setDraggedItemData] = useState(null);
+            const [hasPreviewInserted, setHasPreviewInserted] = useState(false);
+            const [filters, setFilters] = useState({ types: [], attributes: [], costs: [], trigger: null, keywords: [], ip: "", series: "" });
+            const [userDecks, setUserDecks] = useState(() => {
+                const saved = localStorage.getItem('user_deck_collection');
+                return saved ? JSON.parse(saved) : [];
+            });
+            const [selectedListValue, setSelectedListValue] = useState("");
+            const [showAbout, setShowAbout] = useState(false);
+
+            useEffect(() => {
+                fetch('./cards.json?v=' + Date.now())
+                    .then(res => res.json())
+                    .then(data => {
+                        const arr = Array.isArray(data) ? data : [data];
+                        setCardDatabase(arr);
+                        if(arr.length > 0) setSelectedCard(arr[0]);
+                    })
+                    .catch(err => console.error("Data Load Error"));
+            }, []);
+
+            useEffect(() => {
+                localStorage.setItem('user_deck_collection', JSON.stringify(userDecks));
+            }, [userDecks]);
+
+            const deckStats = useMemo(() => {
+                const stats = { cost: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 0 }, type: { Unit: 0, Skill: 0, Item: 0 }, trigger: 0 };
+                deck.filter(c => c.type !== "領袖").forEach(card => {
+                    const c = parseInt(card.cost) || 0;
+                    if (c <= 1) stats.cost['1'] += card.count;
+                    else if (c >= 8) stats.cost['8'] += card.count;
+                    else stats.cost[c.toString()] += card.count;
+                    if (card.type === "單位") stats.type.Unit += card.count;
+                    else if (card.type === "技能") stats.type.Skill += card.count;
+                    else if (card.type === "道具") stats.type.Item += card.count;
+                    const hasTrigger = card.trigger === true || (card.keywords && card.keywords.includes("Trigger"));
+                    if (hasTrigger) stats.trigger += card.count;
+                });
+                return stats;
+            }, [deck]);
+
+            const totalCardsInDeck = useMemo(() => deck.filter(c => c.type !== "領袖").reduce((sum, item) => sum + item.count, 0), [deck]);
+            const leaderCard = useMemo(() => deck.find(c => c.type === "領袖"), [deck]);
+            const normalCardsInDeck = useMemo(() => deck.filter(c => c.type !== "領袖"), [deck]);
+            const isOathValid = useMemo(() => !leaderCard || normalCardsInDeck.every(card => card.attribute === leaderCard.attribute), [leaderCard, normalCardsInDeck]);
+            const isTriggerValid = useMemo(() => deckStats.trigger <= 8, [deckStats.trigger]);
+            const isSingleIdValid = useMemo(() => normalCardsInDeck.every(card => card.count <= 3), [normalCardsInDeck]);
+            const isTotalCountValid = useMemo(() => totalCardsInDeck <= 40, [totalCardsInDeck]);
+            
+            // [FIX] 新增 IP 檢查邏輯
+            const isIpValid = useMemo(() => {
+                const ips = new Set(deck.map(c => c.ip).filter(ip => ip !== undefined && ip !== null && ip !== ""));
+                return ips.size <= 1;
+            }, [deck]);
+
+            const isDeckCompliant = isOathValid && isTriggerValid && isSingleIdValid && isTotalCountValid && isIpValid;
+
+            const processCSVContent = (content) => {
+                const lines = content.split('\n');
+                let newDeck = [];
+                lines.forEach(line => {
+                    const parts = line.trim().split(',');
+                    if ((parts[0] === 'Leader' || parts[0] === 'ldeck') && parts[1]) {
+                        const card = cardDatabase.find(c => c.id === parts[1]);
+                        if (card) newDeck.push({ ...card, count: 1 });
+                    } else if (parts[0] === 'Cards' || parts[0] === 'mdeck') {
+                        parts.slice(1).forEach(id => {
+                            const cardData = cardDatabase.find(c => c.id === id);
+                            if (cardData) {
+                                const idx = newDeck.findIndex(i => i.id === id);
+                                if (idx !== -1) newDeck[idx].count += 1;
+                                else newDeck.push({ ...cardData, count: 1 });
+                            }
+                        });
+                    }
+                });
+                setDeck(newDeck);
+            };
+
+            const handleDeckListSelect = async (e) => {
+                const val = e.target.value;
+                if (!val) { setSelectedListValue(""); return; }
+                setSelectedListValue(val);
+                if (val.startsWith("USER_")) {
+                    const deckIdx = parseInt(val.replace("USER_", ""));
+                    const userDeck = userDecks[deckIdx];
+                    let newDeck = [];
+                    const lCard = cardDatabase.find(c => c.id === userDeck.leader);
+                    if (lCard) newDeck.push({ ...lCard, count: 1 });
+                    userDeck.cards.forEach(id => {
+                        const cData = cardDatabase.find(c => c.id === id);
+                        if (cData) {
+                            const idx = newDeck.findIndex(i => i.id === id);
+                            if (idx !== -1) newDeck[idx].count += 1;
+                            else newDeck.push({ ...cData, count: 1 });
+                        }
+                    });
+                    setDeck(newDeck);
+                } else {
+                    try {
+                        const response = await fetch(`./Deck List/${val}?v=${Date.now()}`);
+                        if (response.ok) processCSVContent(await response.text());
+                    } catch (err) { console.error("Load failed"); }
+                }
+            };
+
+            const saveCurrentDeckToList = () => {
+                if (deck.length === 0) return alert("請先配置牌組。");
+                const name = prompt("請輸入牌組名稱：");
+                if (!name) return;
+                const leader = deck.find(c => c.type === "領袖")?.id || "";
+                const others = deck.filter(c => c.type !== "領袖");
+                const cardIds = others.flatMap(c => Array(c.count).fill(c.id));
+                const newIdx = userDecks.length;
+                setUserDecks(prev => [...prev, { name, leader, cards: cardIds }]);
+                setSelectedListValue(`USER_${newIdx}`);
+                alert(`「${name}」已新增至列表。`);
+            };
+
+            const addToDeck = (card) => {
+                // [FIX] 新增 40 張上限硬鎖，如果已經滿了且不是領袖，則不執行
+                if (card.type !== "領袖" && totalCardsInDeck >= 40) return;
+
+                setDeck(prev => {
+                    if (card.type === "領袖") return [{ ...card, count: 1 }, ...prev.filter(i => i.type !== "領袖")];
+                    const idx = prev.findIndex(i => i.id === card.id);
+                    if (idx !== -1 && prev[idx].count >= 3) return prev;
+                    return (idx !== -1) ? prev.map((i, k) => k === idx ? { ...i, count: i.count + 1 } : i) : [...prev, { ...card, count: 1 }];
+                });
+            };
+
+            const removeFromDeck = (id) => setDeck(prev => prev.reduce((acc, i) => i.id === id ? (i.count > 1 ? [...acc, {...i, count: i.count-1}] : acc) : [...acc, i], []));
+            const removeEntireStack = (id) => setDeck(prev => prev.filter(item => item.id !== id));
+
+            const filteredCards = useMemo(() => {
+                return cardDatabase.filter(card => {
+                    const matchesSearch = card.name.includes(search) || card.id.includes(search);
+                    if (!matchesSearch) return false;
+                    if (filters.ip && card.ip !== filters.ip) return false;
+                    if (filters.series && card.series !== filters.series) return false;
+                    if (filters.types.length > 0 && !filters.types.includes(card.type)) return false;
+                    if (filters.attributes.length > 0 && !filters.attributes.includes(card.attribute)) return false;
+                    if (filters.costs.length > 0) {
+                        if (card.cost === null) return false;
+                        const costStr = (parseInt(card.cost) >= 8) ? "8" : (card.cost || "0").toString();
+                        if (!filters.costs.includes(costStr)) return false;
+                    }
+                    if (filters.trigger !== null) {
+                        const hasTrigger = card.trigger === true || (card.keywords && card.keywords.includes("Trigger"));
+                        if (filters.trigger !== hasTrigger) return false;
+                    }
+                    return true;
+                });
+            }, [cardDatabase, search, filters]);
+
+            const handleDragStart = (e, card, type) => { e.dataTransfer.setData("dragType", type); setDraggingId(card.id); setDraggedItemData(card); setHasPreviewInserted(false); };
+            const handleDragEnter = (e, targetId) => {
+                e.preventDefault();
+                if (!draggedItemData || draggingId === targetId) return;
+                setDeck(prev => {
+                    if (draggedItemData.type === "領袖") return [{ ...draggedItemData, count: 1 }, ...prev.filter(i => i.type !== "領袖" && i.id !== draggedItemData.id)];
+                    const newDeck = [...prev];
+                    const fromIdx = newDeck.findIndex(i => i.id === draggedItemData.id);
+                    const toIdx = newDeck.findIndex(i => i.id === targetId);
+                    if (fromIdx !== -1) {
+                        const [moved] = newDeck.splice(fromIdx, 1);
+                        newDeck.splice(toIdx, 0, moved);
+                    } else if (toIdx !== -1 && !hasPreviewInserted) {
+                        if (prev.find(i => i.id === draggedItemData.id)?.count >= 3) return prev;
+                        newDeck.splice(toIdx, 0, { ...draggedItemData, count: 1 });
+                        setHasPreviewInserted(true);
+                    }
+                    return newDeck;
+                });
+            };
+            const handleDropDatabase = (e) => { e.preventDefault(); if (e.dataTransfer.getData("dragType") === "deck") removeEntireStack(draggingId); setDraggingId(null); };
+            const handleDropMain = (e) => { e.preventDefault(); setIsDraggingOver(false); if (e.dataTransfer.getData("dragType") === "database" && !hasPreviewInserted) addToDeck(draggedItemData); setDraggingId(null); setHasPreviewInserted(false); };
+
+            const ipOptions = useMemo(() => [...new Set(cardDatabase.map(c => c.ip).filter(Boolean))].sort(), [cardDatabase]);
+            const seriesOptions = useMemo(() => [...new Set(cardDatabase.map(c => c.series).filter(Boolean))].sort(), [cardDatabase]);
+
+            const toggleFilter = (category, value) => {
+                setFilters(prev => {
+                    if (category === 'trigger') return { ...prev, trigger: prev.trigger === value ? null : value };
+                    const current = prev[category];
+                    const next = current.includes(value) ? current.filter(v => v !== value) : [...current, value];
+                    return { ...prev, [category]: next };
+                });
+            };
+
+            return (
+                <div className="flex flex-col h-screen p-2 gap-2" onDragOver={(e) => e.preventDefault()}>
+                    {showAbout && <AboutModal onClose={() => setShowAbout(false)} />}
+                    
+                    <nav className="h-[68px] flex items-center px-4 justify-between notion-panel flex-shrink-0">
+                        <div className="flex items-center h-full w-full justify-between">
+                            <div className="flex items-center">
+                                <span className="text-[18px] font-black text-zinc-100 uppercase tracking-tighter mr-8 leading-none">NIVEL ARENA DECK SYSTEM</span>
+                                <div className="flex h-full items-center">
+                                    <div className="flex flex-col">
+                                        <span className="nav-group-label">Local Files</span>
+                                        <div className="flex gap-1.5">
+                                            <button onClick={() => {
+                                                if (deck.length === 0) return;
+                                                const leader = deck.find(c => c.type === "領袖");
+                                                const others = deck.filter(c => c.type !== "領袖");
+                                                let csvContent = `Leader,${leader ? leader.id : ""}\nCards,${others.flatMap(c => Array(c.count).fill(c.id)).join(",")}\n`;
+                                                const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+                                                const link = document.createElement("a");
+                                                link.href = URL.createObjectURL(blob);
+                                                link.download = `deck_${new Date().getTime()}.csv`;
+                                                link.click();
+                                            }} className="nav-btn">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>儲存牌組
+                                            </button>
+                                            <label className="nav-btn">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/></svg>
+                                                讀取牌組
+                                                <input type="file" accept=".csv" onChange={(e) => {
+                                                    const file = e.target.files[0];
+                                                    if (file) {
+                                                        const reader = new FileReader();
+                                                        reader.onload = (ev) => processCSVContent(ev.target.result);
+                                                        reader.readAsText(file);
+                                                    }
+                                                    e.target.value = '';
+                                                    setSelectedListValue("");
+                                                }} className="hidden" />
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div className="nav-divider"></div>
+                                    <div className="flex flex-col">
+                                        <span className="nav-group-label">DECK LIST</span>
+                                        <div className="flex gap-1.5">
+                                            <div className="custom-select-container">
+                                                <select className="nav-btn custom-select min-w-[170px]" value={selectedListValue} onChange={handleDeckListSelect}>
+                                                    <option value="">請選擇一個牌組</option>
+                                                    {DECK_LIST_FILES.map(f => (
+                                                        <option key={f} value={f}>{f.replace('.csv', '')}</option>
+                                                    ))}
+                                                    {userDecks.map((d, i) => <option key={i} value={`USER_${i}`}>{d.name}</option>)}
+                                                </select>
+                                                <span className="custom-select-arrow">▼</span>
+                                            </div>
+                                            <button onClick={saveCurrentDeckToList} className="nav-btn border-dashed border-zinc-500 text-zinc-400 hover:text-white">
+                                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>新增至列表
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="nav-divider"></div>
+                                    <div className="flex flex-col">
+                                        <span className="nav-group-label">Utility</span>
+                                        <button onClick={() => { setDeck([]); setSelectedListValue(""); }} className="nav-btn nav-btn-danger">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>清空牌組
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <button onClick={() => setShowAbout(true)} className="nav-btn">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                                關於
+                            </button>
+                        </div>
+                    </nav>
+
+                    <div className="flex flex-1 gap-2 overflow-hidden">
+                        <aside className="w-80 notion-panel flex flex-col overflow-hidden bg-[#1c1c1c]">
+                            <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌詳情 (DETAILS)</span></div>
+                            <div className="flex-1 overflow-y-auto">
+                                {selectedCard && (
+                                    <div className="p-4 space-y-5">
+                                        <div className="rounded border border-[#2f2f2f] shadow-lg overflow-hidden bg-black/20"><img src={selectedCard.image} className="w-full" /></div>
+                                        <div className="flex flex-col gap-2">
+                                            <h2 className="text-xl font-bold text-white leading-tight break-words">{selectedCard.name}</h2>
+                                            <div className="flex flex-wrap gap-1">{selectedCard.rarity?.map((r, i) => <span key={i} className="rarity-tag">{r}</span>)}</div>
+                                            <p className="text-[10px] font-mono text-zinc-500 uppercase">{selectedCard.id}</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold">
+                                            {["attribute", "type", "cost", "power", "hit"].map(key => {
+                                                const rawValue = selectedCard[key];
+                                                const isValid = rawValue !== null && rawValue !== undefined && rawValue !== "";
+                                                const displayValue = isValid ? rawValue : " - ";
+                                                return (
+                                                    <div key={key} className="secondary-block p-2 flex justify-between items-center">
+                                                        <span className="text-zinc-400 uppercase">{key === "attribute" ? "屬性" : key === "type" ? "種類" : key === "cost" ? "cost" : key}</span>
+                                                        <div className="flex items-center gap-2 text-zinc-100">
+                                                            {key === "attribute" && isValid ? (
+                                                                <div className="flex items-center gap-1.5">{ATTR_MAP[rawValue] && <img src={ATTR_MAP[rawValue].icon} className="attr-icon" />}<span>{ATTR_MAP[rawValue]?.name || rawValue}</span></div>
+                                                            ) : <span>{displayValue}</span>}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="space-y-1"><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">技能效果</p><div>{selectedCard.effects?.map((text, idx) => <HighlightedText key={idx} text={text} />)}</div></div>
+                                    </div>
+                                )}
+                            </div>
+                        </aside>
+
+                        <main className="flex-1 flex flex-col gap-2 overflow-hidden" onDrop={handleDropMain} onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }} onDragLeave={() => setIsDraggingOver(false)}>
+                            <div className="flex gap-2 flex-shrink-0 items-stretch">
+                                <div className="notion-panel flex flex-col overflow-hidden bg-[#1c1c1c]"><div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">領袖 (LEADER)</span></div><div className="p-6 flex-1 flex items-center justify-center">
+                                    {leaderCard ? (<div className="relative group cursor-pointer leader-fixed-size" onClick={() => setSelectedCard(leaderCard)} onContextMenu={(e) => {e.preventDefault(); removeEntireStack(leaderCard.id);}}><img src={leaderCard.image} className="w-full rounded border border-[#2f2f2f] group-hover:border-red-500 shadow-md" /><div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40"><button onClick={(e) => {e.stopPropagation(); removeFromDeck(leaderCard.id);}} className="count-ctrl-btn leader-remove-btn">✕</button></div></div>) : <div className="leader-fixed-size py-20 text-zinc-700 text-[10px] uppercase font-bold tracking-widest italic text-center border-2 border-dashed border-zinc-800/50 rounded">尚未選擇領袖</div>}
+                                </div></div>
+                                <StatsBlock stats={deckStats} />
+                            </div>
+
+                            <div className="notion-panel flex-1 flex flex-col overflow-hidden bg-[#1c1c1c]">
+                                <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <span className="panel-title">卡牌 (CARDS)</span>
+                                        {!isDeckCompliant && (
+                                            <div className="flex items-center gap-2 ml-4 py-0.5 px-3 bg-red-500/10 rounded border border-red-500/20">
+                                                <span className="text-[11px] font-black text-red-500 animate-pulse whitespace-nowrap">⚠️ 此牌組不符規定</span>
+                                                {!isOathValid && <span className="text-[10px] text-red-400 font-bold border-l border-red-500/30 pl-3 ml-1">必須根據隊長誓約配置牌組</span>}
+                                                {/* [FIX] 新增 IP 警告提示 */}
+                                                {!isIpValid && <span className="text-[10px] text-red-400 font-bold border-l border-red-500/30 pl-3 ml-1">牌組 IP 不可混搭</span>}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="text-[11px] font-bold text-zinc-500 tracking-wider">
+                                        卡牌數量: <span className={totalCardsInDeck > 40 ? 'text-red-500 animate-pulse' : 'text-zinc-200'}>{totalCardsInDeck}</span> <span className="text-zinc-600">/ 40</span>
+                                    </div>
+                                </div>
+                                <div className="flex-1 p-5 overflow-y-auto bg-[#161618]">
+                                    {/* [FIX] 移除 justify-center，恢復由左至右 */}
+                                    <div className="flex flex-wrap gap-2 content-start min-h-full">
+                                        {normalCardsInDeck.map((item) => (
+                                            <div key={item.id} className="relative group cursor-pointer card-fixed-size" draggable="true" onDragStart={(e) => handleDragStart(e, item, 'deck')} onDragEnter={(e) => handleDragEnter(e, item.id)} onClick={() => setSelectedCard(item)} onContextMenu={(e) => { e.preventDefault(); removeEntireStack(item.id); }}>
+                                                <img src={item.image} className={`w-full rounded border ${item.attribute !== leaderCard?.attribute ? 'border-[3px] border-red-600 animate-pulse' : 'border-[#2f2f2f]'} group-hover:border-zinc-500 transition-all shadow-md`} />
+                                                <div className="absolute inset-0 flex items-end justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 pb-3">
+                                                    <div className="flex items-center gap-2">
+                                                        <button onClick={(e) => { e.stopPropagation(); removeFromDeck(item.id); }} className="count-ctrl-btn">–</button>
+                                                        <div className={`bg-black/85 text-base font-black w-[34px] h-[34px] rounded-lg flex items-center justify-center shadow-lg border border-white/10 ${item.count > 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{item.count}</div>
+                                                        <button onClick={(e) => { e.stopPropagation(); addToDeck(item); }} className="count-ctrl-btn plus">+</button>
+                                                    </div>
+                                                </div>
+                                                <div className={`absolute -bottom-1 -right-1 bg-black/85 text-base font-black w-[34px] h-[34px] rounded-lg flex items-center justify-center shadow-2xl group-hover:hidden backdrop-blur-sm ${item.count > 3 ? 'text-red-500 animate-pulse' : 'text-white'}`}>{item.count}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        </main>
+
+                        <aside className="w-[460px] notion-panel flex flex-col overflow-hidden bg-[#1c1c1c]" onDrop={handleDropDatabase}>
+                            <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌資料庫 (DATABASE)</span></div>
+                            <div className="p-3 border-b border-[#2f2f2f] bg-[#202020] space-y-3">
+                                <input type="text" placeholder="搜尋ID或卡名（ID 需要大寫）" className="w-full bg-[#2d2d30] border border-[#3a3a3a] p-2 rounded text-[11px] outline-none search-input" onChange={(e) => setSearch(e.target.value)} />
+                                <div className="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <select className="notion-select" value={filters.ip} onChange={(e) => setFilters(prev => ({...prev, ip: e.target.value}))}><option value="">全部 IP</option>{ipOptions.map(ip => <option key={ip} value={ip}>{ip}</option>)}</select>
+                                        <select className="notion-select" value={filters.series} onChange={(e) => setFilters(prev => ({...prev, series: e.target.value}))}><option value="">全部系列</option>{seriesOptions.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                                    </div>
+                                    <div><span className="filter-label">種類</span><div className="grid grid-cols-4 gap-1">{['領袖', '單位', '技能', '道具'].map(t => (<label key={t} className="checkbox-item"><input type="checkbox" checked={filters.types.includes(t)} onChange={() => toggleFilter('types', t)} /> {t}</label>))}</div></div>
+                                    <div><span className="filter-label">屬性</span><div className="flex flex-wrap gap-x-4 gap-y-2">{Object.keys(ATTR_MAP).map(a => (<label key={a} className="checkbox-item"><input type="checkbox" checked={filters.attributes.includes(a)} onChange={() => toggleFilter('attributes', a)} /><div className="flex items-center gap-1"><img src={ATTR_MAP[a].icon} className="attr-icon" /><span>{ATTR_MAP[a].name}</span></div></label>))}</div></div>
+                                    <div><span className="filter-label">cost</span><div className="grid grid-cols-9 gap-1">{['0','1','2','3','4','5','6','7','8'].map(c => (<label key={c} className="checkbox-item"><input type="checkbox" checked={filters.costs.includes(c)} onChange={() => toggleFilter('costs', c)} /> {c === '8' ? '8+' : c}</label>))}</div></div>
+                                    <div><span className="filter-label">Trigger</span><div className="flex gap-4"><label className="checkbox-item"><input type="checkbox" checked={filters.trigger === true} onChange={() => toggleFilter('trigger', true)} /> 有</label><label className="checkbox-item"><input type="checkbox" checked={filters.trigger === false} onChange={() => toggleFilter('trigger', false)} /> 無</label></div></div>
+                                </div>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-x-3 gap-y-2 bg-[#161618] content-start">
+                                {filteredCards.map(card => (
+                                    <div key={card.id} className="group cursor-pointer flex flex-col items-center" 
+                                         draggable="true" 
+                                         onDragStart={(e) => handleDragStart(e, card, 'database')} 
+                                         onClick={() => setSelectedCard(card)} 
+                                         onDoubleClick={() => addToDeck(card)}>
+                                        <div className="w-full relative">
+                                            <img src={card.image} className="w-full rounded border border-[#2f2f2f] group-hover:border-zinc-500 transition-colors shadow-sm" />
+                                        </div>
+                                        <div className="text-[9px] mt-1.5 w-full text-center text-zinc-400 font-medium truncate group-hover:text-white transition-colors">
+                                            {card.name}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </aside>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
