@@ -279,9 +279,9 @@
                 </div>
                 <div><h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">版本更新 (CHANGELOG)</h4>
                     <div className="space-y-2 pl-1">
-                        {/* 更新版本資訊 v0.9.6 */}
+                        <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.7</span><span>更新卡牌資料庫排序</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
                         <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.6</span><span>改善讀取效能</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
-                        <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.5</span><span>效能重構上線</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
+                        <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.5</span><span>響應式設計上線</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
                         <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9</span><span>工具發布</span></div><span className="text-zinc-500 font-mono">2026/02/17</span></div>
                     </div>
                 </div>
@@ -301,7 +301,6 @@
 
             if (isMobile) {
                 return (
-                    /* [修正] 移除 mb-2，確保標題、領袖、數據、卡牌這四個區域間的間距皆為統一個 gap-2 */
                     <div className="notion-panel flex flex-col bg-[#1c1c1c] flex-shrink-0">
                         <div className={`h-9 px-4 bg-[#202020] flex items-center justify-between cursor-pointer ${isCollapsed ? 'rounded-[3px]' : 'rounded-t-[3px]'}`} onClick={() => setIsCollapsed(!isCollapsed)}>
                             <div className="flex items-center gap-2"><span className="panel-title">牌組數據 (STATS)</span></div>
@@ -351,7 +350,7 @@
         const CardDetailContent = ({ card, isMobile }) => (
             <div className="p-4 space-y-5">
                 <div className="rounded border border-[#2f2f2f] shadow-lg overflow-hidden bg-[#202020] flex justify-center">
-                    <img src={card.image} alt={card.name || "card"} className={`${isMobile ? 'max-h-[35vh] w-auto' : 'max-w-full md:w-full'} h-auto object-contain rounded`} />
+                    <img src={card.image} alt={card.name || 'card'} className={`${isMobile ? 'max-h-[35vh] w-auto' : 'max-w-full md:w-full'} h-auto object-contain rounded`} />
                 </div>
                 <div className="flex flex-col gap-2"><h2 className="text-xl font-bold text-white leading-tight break-words">{card.name}</h2><div className="flex flex-wrap gap-1">{card.rarity?.map((r, i) => <span key={i} className="rarity-tag">{r}</span>)}</div><p className="text-[10px] font-mono text-zinc-500 uppercase">{card.id}</p></div>
                 <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold">{["attribute", "type", "cost", "power", "hit"].map(key => { const rawValue = card[key]; const isValid = rawValue !== null && rawValue !== undefined && rawValue !== ""; const displayValue = isValid ? rawValue : " - "; return (<div key={key} className="secondary-block p-2 flex justify-between items-center"><span className="text-zinc-400 uppercase">{key === "attribute" ? "屬性" : key === "type" ? "種類" : key === "cost" ? "cost" : key}</span><div className="flex items-center gap-2 text-zinc-100">{key === "attribute" && isValid ? (<div className="flex items-center gap-1.5">{ATTR_MAP[rawValue] && <img src={ATTR_MAP[rawValue].icon} className="attr-icon" />}<span>{ATTR_MAP[rawValue]?.name || rawValue}</span></div>) : <span>{displayValue}</span>}</div></div>); })}</div>
@@ -443,7 +442,6 @@
             const removeFromDeck = (id) => setDeck(prev => prev.reduce((acc, i) => i.id === id ? (i.count > 1 ? [...acc, {...i, count: i.count-1}] : acc) : [...acc, i], []));
             const removeEntireStack = (id) => setDeck(prev => prev.filter(item => item.id !== id));
             
-            // [防白畫面] 加入嚴格的空值檢查保護 .includes 和 .localeCompare
             const filteredCards = useMemo(() => { 
                 let result = cardDatabase.filter(card => { 
                     const cardName = card.name || "";
@@ -476,9 +474,6 @@
                     if (c.id && deckIds.has(c.id)) inDeck.push(c);
                     else outDeck.push(c);
                 });
-
-                inDeck.sort((a, b) => (a.id || "").localeCompare(b.id || ""));
-                outDeck.sort((a, b) => (a.id || "").localeCompare(b.id || ""));
 
                 return [...inDeck, ...outDeck]; 
             }, [cardDatabase, search, filters, deck, leaderCard]);
