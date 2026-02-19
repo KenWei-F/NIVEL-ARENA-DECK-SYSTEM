@@ -114,12 +114,15 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
-        /* [核心優化] 加入硬體加速 (GPU Acceleration)，防止手機版動畫重繪吃滿效能 */
-        @keyframes breathe-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .animate-breathe { 
-            animation: breathe-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; 
+        /* [核心效能優化] 改為只對純色遮罩進行透明度變化，零繪製成本 */
+        @keyframes breathe-dark { 
+            0%, 100% { opacity: 0; } 
+            50% { opacity: 0.65; } 
+        }
+        .animate-breathe-dark {
+            animation: breathe-dark 3s ease-in-out infinite;
             will-change: opacity;
-            transform: translateZ(0); 
+            transform: translateZ(0); /* 強制開啟硬體加速 */
             -webkit-transform: translateZ(0);
         }
 
@@ -285,6 +288,7 @@
                 </div>
                 <div><h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">版本更新 (CHANGELOG)</h4>
                     <div className="space-y-2 pl-1">
+                        {/* 精簡版本更新文字 */}
                         <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.8</span><span>改善警告動畫效能</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
                         <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.7</span><span>更新卡牌資料庫排序</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
                         <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.6</span><span>改善讀取效能</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
@@ -311,7 +315,8 @@
                     <div className="notion-panel flex flex-col bg-[#1c1c1c] flex-shrink-0">
                         <div className={`h-9 px-4 bg-[#202020] flex items-center justify-between cursor-pointer ${isCollapsed ? 'rounded-[3px]' : 'rounded-t-[3px]'}`} onClick={() => setIsCollapsed(!isCollapsed)}>
                             <div className="flex items-center gap-2"><span className="panel-title">牌組數據 (STATS)</span></div>
-                            <div className="flex items-center gap-3"><span className={`text-[10px] font-mono ${stats.trigger > 8 ? 'text-red-500 font-black animate-breathe' : 'text-zinc-400'}`}>TRIGGER: {stats.trigger}/8</span><svg className={`w-3 h-3 text-[#d4d4d4] transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+                            {/* 移除閃爍，改為靜態紅色警告 */}
+                            <div className="flex items-center gap-3"><span className={`text-[10px] font-mono ${stats.trigger > 8 ? 'text-red-500 font-black' : 'text-zinc-400'}`}>TRIGGER: {stats.trigger}/8</span><svg className={`w-3 h-3 text-[#d4d4d4] transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
                         </div>
                         {!isCollapsed && (
                              <div className="flex-1 flex gap-4 px-5 py-4 items-center justify-around border-t border-[#2f2f2f] rounded-b-[3px]">
@@ -342,7 +347,7 @@
                     <div className="flex-1 flex gap-8 px-5 py-4 items-center">
                         <div className="flex flex-col gap-2 min-w-[210px]"><div className="flex items-end gap-1.5"><span className="text-[10px] font-bold text-zinc-100 uppercase tracking-widest">費用分佈</span><span className="text-[9px] text-zinc-400 font-mono">COST</span></div><div className="flex items-end justify-between h-24 gap-1.5 pt-1 border-b border-zinc-800">{Object.entries(stats.cost).map(([label, val]) => (<div key={label} className="flex-1 flex flex-col h-full items-center"><div className="h-4 flex items-center"><span className={`text-[10px] font-black tracking-tighter ${val > 0 ? 'text-zinc-400' : 'text-transparent'}`}>{val}</span></div><div className="flex-1 w-full relative flex items-end px-0.5">{val > 0 && <div className="w-full bg-zinc-100 rounded-t-[1px] shadow-sm transition-all duration-300" style={{ height: `${(val / maxVal) * 100}%` }}></div>}</div><div className="h-5 flex items-center"><span className="text-[8px] text-zinc-600 font-bold">{label === '1' ? '≤1' : label === '8' ? '≥8' : label}</span></div></div>))}</div></div>
                         <div className="flex flex-col gap-2 items-center"><span className="text-[10px] font-bold text-zinc-200 uppercase tracking-widest">卡牌種類</span><div className="flex items-center gap-4"><div className="relative w-16 h-16"><svg viewBox="0 0 42 42" className="w-full h-full transform -rotate-90"><circle r="15.9155" cx="21" cy="21" fill="transparent" stroke="#27272a" strokeWidth="10" /><circle r="15.9155" cx="21" cy="21" fill="transparent" stroke="#3f3f46" strokeWidth="10" strokeDasharray={`${total>0?100:0} 100`} className="pie-circle" /><circle r="15.9155" cx="21" cy="21" fill="transparent" stroke="#a1a1aa" strokeWidth="10" strokeDasharray={`${total>0?(((stats.type.Unit||0)+(stats.type.Skill||0))/total)*100:0} 100`} className="pie-circle" /><circle r="15.9155" cx="21" cy="21" fill="transparent" stroke="#ffffff" strokeWidth="10" strokeDasharray={`${total>0?((stats.type.Unit||0)/total)*100:0} 100`} className="pie-circle" /></svg></div><div className="flex flex-col gap-1.5 text-[10px] font-bold"><div className="flex items-center gap-2 text-zinc-200"><div className="w-2.5 h-2.5 bg-white rounded-sm shadow-sm"></div><span>單位: <span className="text-white ml-0.5">{stats.type.Unit}</span></span></div><div className="flex items-center gap-2 text-zinc-400"><div className="w-2.5 h-2.5 bg-[#a1a1aa] rounded-sm shadow-sm"></div><span>技能: <span className="text-[#d4d4d8] ml-0.5">{stats.type.Skill}</span></span></div><div className="flex items-center gap-2 text-zinc-500"><div className="w-2.5 h-2.5 bg-[#3f3f46] rounded-sm shadow-sm border border-zinc-700"></div><span>道具: <span className="text-zinc-400 ml-0.5">{stats.type.Item}</span></span></div></div></div></div>
-                        <div className="flex flex-col justify-center gap-12"><div className="flex flex-col justify-center items-center min-w-[60px]"><span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">TRIGGER</span><div className="text-2xl font-black italic tracking-tighter"><span className={stats.trigger > 8 ? 'text-red-500 animate-breathe' : 'text-zinc-100'}>{stats.trigger}</span><span className="text-zinc-600 text-sm mx-1">/</span><span className="text-zinc-600 text-sm">8</span></div></div></div>
+                        <div className="flex flex-col justify-center gap-12"><div className="flex flex-col justify-center items-center min-w-[60px]"><span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-1">TRIGGER</span><div className="text-2xl font-black italic tracking-tighter"><span className={stats.trigger > 8 ? 'text-red-500' : 'text-zinc-100'}>{stats.trigger}</span><span className="text-zinc-600 text-sm mx-1">/</span><span className="text-zinc-600 text-sm">8</span></div></div></div>
                     </div>
                 </div>
             );
@@ -564,8 +569,9 @@
 
                             <div className="notion-panel flex flex-col flex-shrink-0 lg:flex-shrink lg:flex-1 lg:overflow-hidden bg-[#1c1c1c]">
                                 <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center justify-between flex-shrink-0 rounded-t-[3px]">
-                                    <div className="flex items-center gap-3"><span className="panel-title">卡牌 (CARDS)</span>{!isDeckCompliant && (<div className="flex items-center gap-2 ml-4 py-0.5 px-3 bg-red-500/10 rounded border border-red-500/20"><span className="text-[11px] font-black text-red-500 animate-breathe whitespace-nowrap">{!isOathValid ? "⚠️ 與領袖誓約不符" : !isIpValid ? "⚠️ 牌組 IP 不可混搭" : "⚠️ 不符規定"}</span></div>)}</div>
-                                    <div className="text-[11px] font-bold text-zinc-500 tracking-wider">數量: <span className={totalCardsInDeck > 40 ? 'text-red-500 animate-breathe' : 'text-zinc-200'}>{totalCardsInDeck}</span> <span className="text-zinc-600">/ 40</span></div>
+                                    {/* 移除閃爍，改為靜態紅色文字 */}
+                                    <div className="flex items-center gap-3"><span className="panel-title">卡牌 (CARDS)</span>{!isDeckCompliant && (<div className="flex items-center gap-2 ml-4 py-0.5 px-3 bg-red-500/10 rounded border border-red-500/20"><span className="text-[11px] font-black text-red-500 whitespace-nowrap">{!isOathValid ? "⚠️ 與領袖誓約不符" : !isIpValid ? "⚠️ 牌組 IP 不可混搭" : "⚠️ 不符規定"}</span></div>)}</div>
+                                    <div className="text-[11px] font-bold text-zinc-500 tracking-wider">數量: <span className={totalCardsInDeck > 40 ? 'text-red-500' : 'text-zinc-200'}>{totalCardsInDeck}</span> <span className="text-zinc-600">/ 40</span></div>
                                 </div>
                                 <div className="p-5 bg-[#161618] flex-1 overflow-y-auto rounded-b-[3px] max-h-[45vh] lg:max-h-none lg:overflow-y-auto">
                                     <div className="grid grid-cols-5 gap-1 lg:flex lg:flex-wrap lg:gap-2 content-start min-h-full"> 
@@ -584,11 +590,23 @@
                                                     </button>
                                                 )}
 
-                                                <img src={item.image} alt={item.name || "card"} className={`w-full h-full object-cover rounded border transition-colors shadow-md relative z-10 ${item.attribute !== leaderCard?.attribute ? 'border-[3px] border-red-600 animate-breathe' : 'border-[#2f2f2f]'} group-hover:border-zinc-500`} />
+                                                {/* 圖片本體，無動畫，無紅色邊框，只有純黑色基本邊框 */}
+                                                <img src={item.image} alt={item.name || "card"} className="w-full h-full object-cover rounded border border-[#2f2f2f] transition-colors shadow-md relative z-10 group-hover:border-zinc-500" />
                                                 
-                                                <div className="hidden lg:flex absolute inset-0 items-end justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 pb-3 z-30"><div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); removeFromDeck(item.id); }} className="count-ctrl-btn">–</button><div className={`bg-black/85 text-base font-black w-[34px] h-[34px] rounded-lg flex items-center justify-center shadow-lg border border-white/10 ${item.count > 3 ? 'text-red-500 animate-breathe' : 'text-white'}`}>{item.count}</div><button onClick={(e) => { e.stopPropagation(); addToDeck(item); }} className="count-ctrl-btn plus">+</button></div></div>
+                                                {/* [效能核武] 獨立的 GPU 呼吸警告層與靜態紅色邊框 */}
+                                                {item.attribute !== leaderCard?.attribute && (
+                                                    <>
+                                                        {/* 黑灰色透明遮罩做呼吸動畫，模擬圖片變透明的視覺，不影響 GPU */}
+                                                        <div className="absolute inset-0 bg-[#161618] rounded animate-breathe-dark z-20 pointer-events-none"></div>
+                                                        {/* 靜態暗紅色邊框，清楚提示但不刺眼閃爍 */}
+                                                        <div className="absolute inset-0 border-[3px] border-red-800/80 rounded z-20 pointer-events-none"></div>
+                                                    </>
+                                                )}
                                                 
-                                                <div className={`absolute lg:-bottom-1 lg:-right-1 bottom-0 right-0 bg-black/85 text-[10px] lg:text-base font-black w-4 h-4 lg:w-[34px] lg:h-[34px] rounded-tl lg:rounded-lg flex items-center justify-center shadow-2xl lg:group-hover:hidden backdrop-blur-sm border-t border-l border-white/10 lg:border-none z-30 ${item.count > 3 ? 'text-red-500 animate-breathe' : 'text-white'}`}>{item.count}</div>
+                                                {/* 移除文字的過度閃爍，改為靜態紅色 */}
+                                                <div className="hidden lg:flex absolute inset-0 items-end justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 pb-3 z-30"><div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); removeFromDeck(item.id); }} className="count-ctrl-btn">–</button><div className={`bg-black/85 text-base font-black w-[34px] h-[34px] rounded-lg flex items-center justify-center shadow-lg border border-white/10 ${item.count > 3 ? 'text-red-500' : 'text-white'}`}>{item.count}</div><button onClick={(e) => { e.stopPropagation(); addToDeck(item); }} className="count-ctrl-btn plus">+</button></div></div>
+                                                
+                                                <div className={`absolute lg:-bottom-1 lg:-right-1 bottom-0 right-0 bg-black/85 text-[10px] lg:text-base font-black w-4 h-4 lg:w-[34px] lg:h-[34px] rounded-tl lg:rounded-lg flex items-center justify-center shadow-2xl lg:group-hover:hidden backdrop-blur-sm border-t border-l border-white/10 lg:border-none z-30 ${item.count > 3 ? 'text-red-500' : 'text-white'}`}>{item.count}</div>
                                             </div>
                                         ))}
                                     </div>
