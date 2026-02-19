@@ -14,16 +14,18 @@
             color: #ffffff; 
             height: 100dvh;
             overflow: hidden; 
+            overscroll-behavior-y: none; 
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             -webkit-tap-highlight-color: transparent;
             user-select: none;
             -webkit-user-select: none;
         }
+
         ::-webkit-scrollbar { width: 5px; height: 5px; }
         ::-webkit-scrollbar-thumb { background: #373737; border-radius: 10px; }
         ::-webkit-scrollbar-track { background: transparent; }
         
-        .notion-panel { background-color: #202020; border: 1px solid #2f2f2f; border-radius: 4px; }
+        .notion-panel { background-color: #202020; border: 1px solid #2f2f2f; border-radius: 4px; overflow: hidden; }
         .secondary-block { background-color: #2d2d30; border: 1px solid #3a3a3a; border-radius: 4px; }
         .effect-callout { padding: 12px; line-height: 1.6; font-size: 0.85rem; color: #e0e0e0; margin-bottom: 10px; user-select: text; -webkit-user-select: text; }
 
@@ -49,14 +51,13 @@
         .checkbox-item { display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 11px; color: #d4d4d4; padding: 2px 0; }
         input[type="checkbox"] { accent-color: #ef4444; width: 13px; height: 13px; cursor: pointer; }
 
-        /* [修正 3] Select 樣式修復：強制 display: block 解決 iOS 箭頭消失問題 */
         .notion-select, .custom-select { 
             width: 100%; 
             background-color: #2d2d30 !important; 
             border: 1px solid #3a3a3a !important; 
             color: #d4d4d4; 
             font-size: 11px; 
-            padding: 6px 30px 6px 8px !important; /* 確保右側有空間顯示箭頭 */
+            padding: 6px 30px 6px 8px !important; 
             border-radius: 4px; 
             outline: none; 
             cursor: pointer;
@@ -67,7 +68,7 @@
             background-repeat: no-repeat;
             background-position: right 8px center;
             background-size: 12px;
-            display: block !important; /* 關鍵修正：防止 nav-btn 的 flex 影響 */
+            display: block !important;
             line-height: 1.5;
         }
 
@@ -95,7 +96,6 @@
         .custom-select-container { position: relative; display: flex; align-items: center; }
         
         @keyframes modalFadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-        
         .modal-content { animation: modalFadeIn 0.2s ease-out; }
 
         .version-tag { background: #3f3f46; color: #fff; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-family: monospace; }
@@ -119,12 +119,13 @@
 
         @keyframes slide-hint-right { 0%, 100% { transform: translateX(0); opacity: 0.8; } 50% { transform: translateX(3px); opacity: 0.3; } }
         @keyframes slide-hint-left { 0%, 100% { transform: translateX(0); opacity: 0.8; } 50% { transform: translateX(-3px); opacity: 0.3; } }
-        
         .animate-slide-hint-right { animation: slide-hint-right 1.5s ease-in-out infinite; }
         .animate-slide-hint-left { animation: slide-hint-left 1.5s ease-in-out infinite; }
+        
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .spinner { animation: spin 1s linear infinite; }
 
         .modal-handle { width: 40px; height: 5px; background-color: #52525b; border-radius: 10px; margin: 8px auto 4px auto; }
-        
         .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
     </style>
 </head>
@@ -132,7 +133,7 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect, useMemo, useRef } = React;
+        const { useState, useEffect, useMemo, useRef, memo } = React;
 
         const DECK_LIST_FILES = [
             "ST01.csv", "ST02.csv", "ST03.csv", "ST04.csv", "ST05.csv",
@@ -155,6 +156,58 @@
             "黃": { name: "雷霆", icon: "images/Icon/ico_yellow.png" }
         };
 
+        /* [核心優化 1] 支援「快取破壞」的智慧圖片元件，根除 Timeout 卡死 */
+        const SmartImage = memo(({ src, alt, className }) => {
+            const [status, setStatus] = useState('loading'); 
+            const [retryCount, setRetryCount] = useState(0); 
+
+            // 當外部的 src 改變時，重置狀態
+            useEffect(() => {
+                setStatus('loading');
+                setRetryCount(0);
+            }, [src]);
+
+            const handleRetry = (e) => {
+                e.stopPropagation();
+                setStatus('loading');
+                // 每次點擊增加計數器，強迫瀏覽器捨棄死鎖的快取，重新發起全新請求
+                setRetryCount(c => c + 1);
+            };
+
+            // 產生帶有防快取參數的圖片來源
+            const imageSrc = retryCount > 0 ? `${src}?retry=${retryCount}` : src;
+
+            return (
+                <div className={`relative overflow-hidden bg-[#202020] ${className}`} style={{aspectRatio: '250/350'}}>
+                    {status === 'loading' && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-zinc-600 bg-[#252525]">
+                            <svg className="w-5 h-5 spinner" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                        </div>
+                    )}
+                    
+                    {status === 'error' && (
+                        <div onClick={handleRetry} className="absolute inset-0 flex flex-col items-center justify-center bg-[#252525] text-red-400/80 cursor-pointer hover:bg-[#303030] transition-colors z-20 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.3)]">
+                            <svg viewBox="0 0 24 24" className="w-5 h-5 mb-1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                            <span className="text-[9px] font-bold tracking-widest">RETRY</span>
+                        </div>
+                    )}
+
+                    <img 
+                        src={imageSrc} 
+                        alt={alt}
+                        loading="lazy" 
+                        decoding="async"
+                        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${status === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+                        onLoad={() => setStatus('loaded')}
+                        onError={() => setStatus('error')}
+                    />
+                </div>
+            );
+        });
+
         const FilterSection = ({ search, setSearch, filters, setFilters, toggleFilter, ipOptions, seriesOptions }) => (
             <div className="p-3 bg-[#202020] space-y-3 border-b border-[#2f2f2f] flex-shrink-0">
                 <input type="text" placeholder="搜尋ID或卡名（ID 需要大寫）" className="w-full bg-[#2d2d30] border border-[#3a3a3a] p-2 rounded text-[11px] outline-none search-input" value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -171,7 +224,7 @@
             </div>
         );
 
-        const ModalOverlay = ({ children, onClose, title, isMobile }) => {
+        const ModalOverlay = ({ children, onClose, title, isMobile, scrollId }) => {
             const [translateY, setTranslateY] = useState(isMobile ? '100%' : 0);
             const [isDragging, setIsDragging] = useState(false);
             const startY = useRef(0);
@@ -179,32 +232,18 @@
 
             useEffect(() => { if (isMobile) requestAnimationFrame(() => setTranslateY(0)); }, [isMobile]);
 
-            const handleTouchStart = (e) => {
-                if (!isMobile) return;
-                startY.current = e.touches[0].clientY;
-                setIsDragging(true);
-            };
-
+            const handleTouchStart = (e) => { if (!isMobile) return; startY.current = e.touches[0].clientY; setIsDragging(true); };
             const handleTouchMove = (e) => {
                 if (!isMobile || !isDragging) return;
                 const currentY = e.touches[0].clientY;
                 const diff = currentY - startY.current;
-                if (diff > 0) {
-                    currentTranslate.current = diff;
-                    setTranslateY(diff); 
-                }
+                if (diff > 0) { currentTranslate.current = diff; setTranslateY(diff); }
             };
-
             const handleTouchEnd = () => {
                 if (!isMobile || !isDragging) return;
                 setIsDragging(false);
-                if (currentTranslate.current > 150) {
-                    setTranslateY('100%'); 
-                    setTimeout(onClose, 250);
-                } else {
-                    setTranslateY(0);
-                    currentTranslate.current = 0;
-                }
+                if (currentTranslate.current > 150) { setTranslateY('100%'); setTimeout(onClose, 250); } 
+                else { setTranslateY(0); currentTranslate.current = 0; }
             };
 
             return (
@@ -217,15 +256,14 @@
                             {isMobile && <div className="modal-handle"></div>}
                             <div className={isMobile ? "text-center" : "flex justify-between items-center w-full"}><span className="panel-title text-sm">{title}</span>{!isMobile && <button onClick={onClose} className="text-zinc-400 font-bold p-2 hover:text-white">✕</button>}</div>
                         </div>
-                        {/* [修正 2] 移除所有 pb, 完全由 Footer 控制 */}
-                        <div className="overflow-y-auto flex-1 h-full"> {children} </div>
+                        <div id={scrollId} className="overflow-y-auto flex-1 h-full pb-safe"> {children} </div>
                     </div>
                 </div>
             );
         };
 
         const AboutContent = () => (
-            <div className="p-8 space-y-8 pb-12 pb-safe">
+            <div className="p-8 space-y-8 pb-4 pb-safe">
                 <div className="space-y-4 text-[13px] text-zinc-200 leading-relaxed text-justify">
                     <p>NIVEL ARENA DECK SYSTEM 是專為 NA TCG 玩家所開發的卡牌構築工具，旨在提供快速、直覺的牌組建立與查看。</p>
                     <p>本人非程式專業，此工具完全依靠 AI 來製作，如有任何問題與建議歡迎聯繫我。</p>
@@ -235,9 +273,8 @@
                     本工具所使用的資料皆來自繁中資料庫與官網，所有圖片、角色、文字內容之著作權均屬原始權利者所有，如有侵權疑慮請來信告知。
                 </div>
                 <div><h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">版本更新 (CHANGELOG)</h4>
-                    {/* [修正 4] 還原版本 v0.9.5 和 v0.9 */}
                     <div className="space-y-2 pl-1">
-                        <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.5</span><span>響應式設計上線</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
+                        <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.5</span><span>效能重構上線</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
                         <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9</span><span>工具發布</span></div><span className="text-zinc-500 font-mono">2026/02/17</span></div>
                     </div>
                 </div>
@@ -258,10 +295,9 @@
             if (isMobile) {
                 return (
                     <div className="notion-panel flex flex-col bg-[#1c1c1c] mb-2 flex-shrink-0">
-                        {/* 修正 4: 統一標題高度 h-9 */}
                         <div className={`h-9 px-4 bg-[#202020] flex items-center justify-between cursor-pointer ${isCollapsed ? 'rounded-[3px]' : 'rounded-t-[3px]'}`} onClick={() => setIsCollapsed(!isCollapsed)}>
                             <div className="flex items-center gap-2"><span className="panel-title">牌組數據 (STATS)</span></div>
-                            <div className="flex items-center gap-3"><span className={`text-[10px] font-mono ${stats.trigger > 8 ? 'text-red-500 font-black animate-breathe' : 'text-zinc-400'}`}>TRIGGER: {stats.trigger}/8</span><svg className={`w-3 h-3 text-d4d4d4 transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
+                            <div className="flex items-center gap-3"><span className={`text-[10px] font-mono ${stats.trigger > 8 ? 'text-red-500 font-black animate-breathe' : 'text-zinc-400'}`}>TRIGGER: {stats.trigger}/8</span><svg className={`w-3 h-3 text-[#d4d4d4] transition-transform duration-300 ${isCollapsed ? '' : 'rotate-180'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></div>
                         </div>
                         {!isCollapsed && (
                              <div className="flex-1 flex gap-4 px-5 py-4 items-center justify-around border-t border-[#2f2f2f] rounded-b-[3px]">
@@ -305,9 +341,11 @@
         };
 
         const CardDetailContent = ({ card, isMobile }) => (
-            /* [修正 2] 移除所有 pb */
             <div className="p-4 space-y-5">
-                <div className="rounded border border-[#2f2f2f] shadow-lg overflow-hidden bg-black/20 flex justify-center"><img src={card.image} className={`${isMobile ? 'max-h-[35vh] w-auto' : 'max-w-full md:w-full'} h-auto object-contain`} /></div>
+                <div className="rounded border border-[#2f2f2f] shadow-lg overflow-hidden bg-[#202020] flex justify-center">
+                    {/* [統一體驗] 詳情區也使用 SmartImage 提供一致的載入與重試體驗 */}
+                    <SmartImage src={card.image} alt={card.name} className={`${isMobile ? 'max-h-[35vh] w-auto' : 'max-w-full md:w-full'} h-auto object-contain rounded`} />
+                </div>
                 <div className="flex flex-col gap-2"><h2 className="text-xl font-bold text-white leading-tight break-words">{card.name}</h2><div className="flex flex-wrap gap-1">{card.rarity?.map((r, i) => <span key={i} className="rarity-tag">{r}</span>)}</div><p className="text-[10px] font-mono text-zinc-500 uppercase">{card.id}</p></div>
                 <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold">{["attribute", "type", "cost", "power", "hit"].map(key => { const rawValue = card[key]; const isValid = rawValue !== null && rawValue !== undefined && rawValue !== ""; const displayValue = isValid ? rawValue : " - "; return (<div key={key} className="secondary-block p-2 flex justify-between items-center"><span className="text-zinc-400 uppercase">{key === "attribute" ? "屬性" : key === "type" ? "種類" : key === "cost" ? "cost" : key}</span><div className="flex items-center gap-2 text-zinc-100">{key === "attribute" && isValid ? (<div className="flex items-center gap-1.5">{ATTR_MAP[rawValue] && <img src={ATTR_MAP[rawValue].icon} className="attr-icon" />}<span>{ATTR_MAP[rawValue]?.name || rawValue}</span></div>) : <span>{displayValue}</span>}</div></div>); })}</div>
                 <div className="space-y-1"><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">技能效果</p><div>{card.effects?.map((text, idx) => <HighlightedText key={idx} text={text} />)}</div></div>
@@ -325,12 +363,38 @@
             const navRef = useRef(null);
             const [canScrollLeft, setCanScrollLeft] = useState(false);
             const [canScrollRight, setCanScrollRight] = useState(true);
+            
+            const [displayLimit, setDisplayLimit] = useState(20);
 
-            useEffect(() => { const handleResize = () => setIsMobile(window.innerWidth < 1024); window.addEventListener('resize', handleResize); fetch('./cards.json?v=' + Date.now()).then(res => res.json()).then(data => { const arr = Array.isArray(data) ? data : [data]; setCardDatabase(arr); if(arr.length > 0 && !isMobile) setSelectedCard(arr[0]); }).catch(err => console.error("Data Load Error")); return () => window.removeEventListener('resize', handleResize); }, []);
+            useEffect(() => { 
+                const handleResize = () => setIsMobile(window.innerWidth < 1024); 
+                window.addEventListener('resize', handleResize); 
+                
+                fetch('./cards.json?v=' + Date.now())
+                    .then(res => res.json())
+                    .then(data => { 
+                        const arr = Array.isArray(data) ? data : [data]; 
+                        setCardDatabase(arr); 
+                        if(arr.length > 0 && window.innerWidth >= 1024) setSelectedCard(arr[0]); 
+                    })
+                    .catch(err => console.error("Data Load Error")); 
+
+                return () => window.removeEventListener('resize', handleResize); 
+            }, []);
+
             useEffect(() => { localStorage.setItem('user_deck_collection', JSON.stringify(userDecks)); }, [userDecks]);
 
             const checkScroll = () => { if (navRef.current) { const { scrollLeft, scrollWidth, clientWidth } = navRef.current; setCanScrollLeft(scrollLeft > 0); setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5); } };
             useEffect(() => { checkScroll(); window.addEventListener('resize', checkScroll); return () => window.removeEventListener('resize', checkScroll); }, []);
+
+            /* [修復 4] 篩選時強制重置資料庫與滾動條 */
+            useEffect(() => { 
+                setDisplayLimit(20); 
+                const mobileScroll = document.getElementById('mobile-db-scroll');
+                if (mobileScroll) mobileScroll.scrollTop = 0;
+                const pcScroll = document.getElementById('pc-db-scroll');
+                if (pcScroll) pcScroll.scrollTop = 0;
+            }, [search, filters]);
 
             const deckStats = useMemo(() => { const stats = { cost: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 0 }, type: { Unit: 0, Skill: 0, Item: 0 }, trigger: 0 }; deck.filter(c => c.type !== "領袖").forEach(card => { const c = parseInt(card.cost) || 0; if (c <= 1) stats.cost['1'] += card.count; else if (c >= 8) stats.cost['8'] += card.count; else stats.cost[c.toString()] += card.count; if (card.type === "單位") stats.type.Unit += card.count; else if (card.type === "技能") stats.type.Skill += card.count; else if (card.type === "道具") stats.type.Item += card.count; const hasTrigger = card.trigger === true || (card.keywords && card.keywords.includes("Trigger")); if (hasTrigger) stats.trigger += card.count; }); return stats; }, [deck]);
             const totalCardsInDeck = useMemo(() => deck.filter(c => c.type !== "領袖").reduce((sum, item) => sum + item.count, 0), [deck]);
@@ -344,13 +408,73 @@
             const isDeckCompliant = isOathValid && isTriggerValid && isSingleIdValid && isTotalCountValid && isIpValid;
 
             const processCSVContent = (content) => { const lines = content.split('\n'); let newDeck = []; lines.forEach(line => { const parts = line.trim().split(','); if ((parts[0] === 'Leader' || parts[0] === 'ldeck') && parts[1]) { const card = cardDatabase.find(c => c.id === parts[1]); if (card) newDeck.push({ ...card, count: 1 }); } else if (parts[0] === 'Cards' || parts[0] === 'mdeck') { parts.slice(1).forEach(id => { const cardData = cardDatabase.find(c => c.id === id); if (cardData) { const idx = newDeck.findIndex(i => i.id === id); if (idx !== -1) newDeck[idx].count += 1; else newDeck.push({ ...cardData, count: 1 }); } }); } }); setDeck(newDeck); };
-            const handleDeckListSelect = async (e) => { const val = e.target.value; if (!val) { setSelectedListValue(""); return; } setSelectedListValue(val); if (val.startsWith("USER_")) { const deckIdx = parseInt(val.replace("USER_", "")); const userDeck = userDecks[deckIdx]; let newDeck = []; const lCard = cardDatabase.find(c => c.id === userDeck.leader); if (lCard) newDeck.push({ ...lCard, count: 1 }); userDeck.cards.forEach(id => { const cData = cardDatabase.find(c => c.id === id); if (cData) { const idx = newDeck.findIndex(i => i.id === id); if (idx !== -1) newDeck[idx].count += 1; else newDeck.push({ ...cData, count: 1 }); } }); setDeck(newDeck); } else { try { const response = await fetch(`./Deck List/${val}?v=${Date.now()}`); if (response.ok) processCSVContent(await response.text()); } catch (err) { console.error("Load failed"); } } };
+            
+            /* [核心修復 3] 切換牌組時瞬間清空畫面，搶佔下載頻寬，給予最快回饋 */
+            const handleDeckListSelect = async (e) => { 
+                const val = e.target.value; 
+                setSelectedListValue(val); 
+                if (!val) return; 
+
+                // 瞬間清空牌組，中斷不必要的渲染，優先載入新牌組
+                setDeck([]);
+
+                if (val.startsWith("USER_")) { 
+                    const deckIdx = parseInt(val.replace("USER_", "")); const userDeck = userDecks[deckIdx]; let newDeck = []; const lCard = cardDatabase.find(c => c.id === userDeck.leader); if (lCard) newDeck.push({ ...lCard, count: 1 }); userDeck.cards.forEach(id => { const cData = cardDatabase.find(c => c.id === id); if (cData) { const idx = newDeck.findIndex(i => i.id === id); if (idx !== -1) newDeck[idx].count += 1; else newDeck.push({ ...cData, count: 1 }); } }); setDeck(newDeck); 
+                } else { 
+                    try { const response = await fetch(`./Deck List/${val}?v=${Date.now()}`); if (response.ok) processCSVContent(await response.text()); } catch (err) { console.error("Load failed"); } 
+                } 
+            };
+            
             const saveCurrentDeckToList = () => { if (deck.length === 0) return alert("請先配置牌組。"); const name = prompt("請輸入牌組名稱："); if (!name) return; const leader = deck.find(c => c.type === "領袖")?.id || ""; const others = deck.filter(c => c.type !== "領袖"); const cardIds = others.flatMap(c => Array(c.count).fill(c.id)); const newIdx = userDecks.length; setUserDecks(prev => [...prev, { name, leader, cards: cardIds }]); setSelectedListValue(`USER_${newIdx}`); alert(`「${name}」已新增至列表。`); };
             const addToDeck = (card) => { if (card.type !== "領袖" && totalCardsInDeck >= 40) return; setDeck(prev => { if (card.type === "領袖") return [{ ...card, count: 1 }, ...prev.filter(i => i.type !== "領袖")]; const idx = prev.findIndex(i => i.id === card.id); if (idx !== -1 && prev[idx].count >= 3) return prev; return (idx !== -1) ? prev.map((i, k) => k === idx ? { ...i, count: i.count + 1 } : i) : [...prev, { ...card, count: 1 }]; }); };
             const removeFromDeck = (id) => setDeck(prev => prev.reduce((acc, i) => i.id === id ? (i.count > 1 ? [...acc, {...i, count: i.count-1}] : acc) : [...acc, i], []));
             const removeEntireStack = (id) => setDeck(prev => prev.filter(item => item.id !== id));
             
-            const filteredCards = useMemo(() => { return cardDatabase.filter(card => { const matchesSearch = card.name.includes(search) || card.id.includes(search); if (!matchesSearch) return false; if (filters.ip && card.ip !== filters.ip) return false; if (filters.series && card.series !== filters.series) return false; if (filters.types.length > 0 && !filters.types.includes(card.type)) return false; if (filters.attributes.length > 0 && !filters.attributes.includes(card.attribute)) return false; if (filters.costs.length > 0) { if (card.cost === null) return false; const costStr = (parseInt(card.cost) >= 8) ? "8" : (card.cost || "0").toString(); if (!filters.costs.includes(costStr)) return false; } if (filters.trigger !== null) { const hasTrigger = card.trigger === true || (card.keywords && card.keywords.includes("Trigger")); if (filters.trigger !== hasTrigger) return false; } return true; }); }, [cardDatabase, search, filters]);
+            /* [核心修復 2] 確保牌組內的卡片排在資料庫最前面，並各自按照 ID 排序 */
+            const filteredCards = useMemo(() => { 
+                let result = cardDatabase.filter(card => { 
+                    const matchesSearch = card.name.includes(search) || card.id.includes(search); 
+                    if (!matchesSearch) return false; 
+                    if (filters.ip && card.ip !== filters.ip) return false; 
+                    if (filters.series && card.series !== filters.series) return false; 
+                    if (filters.types.length > 0 && !filters.types.includes(card.type)) return false; 
+                    if (filters.attributes.length > 0 && !filters.attributes.includes(card.attribute)) return false; 
+                    if (filters.costs.length > 0) { 
+                        if (card.cost === null) return false; 
+                        const costStr = (parseInt(card.cost) >= 8) ? "8" : (card.cost || "0").toString(); 
+                        if (!filters.costs.includes(costStr)) return false; 
+                    } 
+                    if (filters.trigger !== null) { 
+                        const hasTrigger = card.trigger === true || (card.keywords && card.keywords.includes("Trigger")); 
+                        if (filters.trigger !== hasTrigger) return false; 
+                    } 
+                    return true; 
+                }); 
+
+                // 將目前已選入牌組的卡片提取出來
+                const deckIds = new Set(deck.map(c => c.id));
+                if (leaderCard) deckIds.add(leaderCard.id);
+
+                const inDeck = [];
+                const outDeck = [];
+
+                result.forEach(c => {
+                    if (deckIds.has(c.id)) inDeck.push(c);
+                    else outDeck.push(c);
+                });
+
+                // 兩組各自以 ID 字母順序排序
+                inDeck.sort((a, b) => a.id.localeCompare(b.id));
+                outDeck.sort((a, b) => a.id.localeCompare(b.id));
+
+                return [...inDeck, ...outDeck]; // 合併，已選的在前
+            }, [cardDatabase, search, filters, deck, leaderCard]);
+            
+            const visibleCards = useMemo(() => filteredCards.slice(0, displayLimit), [filteredCards, displayLimit]);
+
+            // [效能優化] 載入更多，完全取代容易出錯的無限滾動
+            const loadMoreCards = () => setDisplayLimit(prev => prev + 20);
+
             const handleDragStart = (e, card, type) => { e.dataTransfer.setData("dragType", type); setDraggingId(card.id); setDraggedItemData(card); setHasPreviewInserted(false); };
             const handleDragEnter = (e, targetId) => { e.preventDefault(); if (!draggedItemData || draggingId === targetId) return; setDeck(prev => { if (draggedItemData.type === "領袖") return [{ ...draggedItemData, count: 1 }, ...prev.filter(i => i.type !== "領袖" && i.id !== draggedItemData.id)]; const newDeck = [...prev]; const fromIdx = newDeck.findIndex(i => i.id === draggedItemData.id); const toIdx = newDeck.findIndex(i => i.id === targetId); if (fromIdx !== -1) { const [moved] = newDeck.splice(fromIdx, 1); newDeck.splice(toIdx, 0, moved); } else if (toIdx !== -1 && !hasPreviewInserted) { if (prev.find(i => i.id === draggedItemData.id)?.count >= 3) return prev; newDeck.splice(toIdx, 0, { ...draggedItemData, count: 1 }); setHasPreviewInserted(true); } return newDeck; }); };
             const handleDropDatabase = (e) => { e.preventDefault(); if (e.dataTransfer.getData("dragType") === "deck") removeEntireStack(draggingId); setDraggingId(null); };
@@ -371,14 +495,12 @@
             };
 
             return (
-                /* [修正 1] 確保外層允許滾動，內容容器不鎖定高度 */
-                <div className="flex flex-col h-[100dvh] p-2 gap-2 w-screen overflow-y-auto lg:overflow-hidden">
+                <div className="flex flex-col h-[100dvh] w-screen relative">
                     {showAbout && <ModalOverlay onClose={() => setShowAbout(false)} title="關於本工具 (ABOUT)" isMobile={isMobile}><AboutContent /></ModalOverlay>}
                     
-                    <nav className="h-[68px] flex items-center px-4 justify-between notion-panel flex-shrink-0">
+                    <nav className="h-[68px] flex items-center px-4 justify-between notion-panel flex-shrink-0 m-2 mb-0">
                         <div className="relative flex items-center h-full w-full overflow-hidden">
-                            {/* [修正 2] 左右滑動提示優化：漸層 */}
-                            {canScrollLeft && <div className="absolute left-0 top-0 bottom-0 w-6 pointer-events-none md:hidden flex items-center justify-start z-10 from-[#202020] via-[#202020]/90 to-transparent bg-gradient-to-r"><svg className="w-3 h-3 text-zinc-400 animate-slide-hint-left rotate-180 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></div>}
+                            {canScrollLeft && <div className="absolute left-0 top-0 bottom-0 w-6 pointer-events-none md:hidden flex items-center justify-start z-10 from-[#202020] via-[#202020]/90 to-transparent bg-gradient-to-r"><svg className="w-3 h-3 text-zinc-400 animate-slide-hint-left ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg></div>}
                             {canScrollRight && <div className="absolute right-0 top-0 bottom-0 w-6 pointer-events-none md:hidden flex items-center justify-end z-10 from-transparent via-[#202020]/90 to-[#202020] bg-gradient-to-r"><svg className="w-3 h-3 text-zinc-400 animate-slide-hint-right mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg></div>}
                             
                             <div ref={navRef} onScroll={checkScroll} className="flex items-center h-full w-full justify-between overflow-x-auto no-scrollbar gap-4 pr-6">
@@ -387,7 +509,6 @@
                                     <div className="flex h-full items-center">
                                         <div className="flex flex-col"><span className="nav-group-label">Local Files</span><div className="flex gap-1.5"><button onClick={() => { if (deck.length === 0) return; const leader = deck.find(c => c.type === "領袖"); const others = deck.filter(c => c.type !== "領袖"); let csvContent = `Leader,${leader ? leader.id : ""}\nCards,${others.flatMap(c => Array(c.count).fill(c.id)).join(",")}\n`; const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `deck_${new Date().getTime()}.csv`; link.click(); }} className="nav-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>儲存牌組</button><label className="nav-btn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4M17 9l-5 5-5-5M12 12.8V2.5"/></svg>讀取牌組<input type="file" accept=".csv" onChange={(e) => { const file = e.target.files[0]; if (file) { const reader = new FileReader(); reader.onload = (ev) => processCSVContent(ev.target.result); reader.readAsText(file); } e.target.value = ''; setSelectedListValue(""); }} className="hidden" /></label></div></div>
                                         <div className="nav-divider"></div>
-                                        {/* [修正 3] Dropdown Arrow 樣式統一 */}
                                         <div className="flex flex-col"><span className="nav-group-label">DECK LIST</span><div className="flex gap-1.5"><div className="custom-select-container"><select className="nav-btn custom-select min-w-[170px]" value={selectedListValue} onChange={handleDeckListSelect}><option value="">請選擇一個牌組</option>{DECK_LIST_FILES.map(f => (<option key={f} value={f}>{f.replace('.csv', '')}</option>))}{userDecks.map((d, i) => <option key={i} value={`USER_${i}`}>{d.name}</option>)}</select></div><button onClick={saveCurrentDeckToList} className="nav-btn border-dashed border-zinc-500 text-zinc-400 hover:text-white"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>新增至列表</button></div></div>
                                         <div className="nav-divider"></div>
                                         <div className="flex flex-col"><span className="nav-group-label">Utility</span><button onClick={() => { setDeck([]); setSelectedListValue(""); }} className="nav-btn nav-btn-danger"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>清空牌組</button></div>
@@ -399,8 +520,8 @@
                         </div>
                     </nav>
 
-                    <div className="flex flex-1 gap-2 lg:overflow-hidden relative flex-col lg:flex-row h-full">
-                        <aside className="hidden lg:flex w-80 notion-panel flex-col overflow-hidden bg-[#1c1c1c]"><div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌詳情 (DETAILS)</span></div><div className="flex-1 overflow-y-auto">{selectedCard && <CardDetailContent card={selectedCard} />}</div></aside>
+                    <div className="flex flex-col lg:flex-row flex-1 p-2 gap-2 overflow-y-auto lg:overflow-hidden relative">
+                        <aside className="hidden lg:flex w-80 notion-panel flex-col overflow-hidden bg-[#1c1c1c] flex-shrink-0"><div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌詳情 (DETAILS)</span></div><div className="flex-1 overflow-y-auto">{selectedCard && <CardDetailContent card={selectedCard} />}</div></aside>
 
                         <main className="flex-1 flex flex-col gap-2 lg:overflow-hidden min-h-0" onDrop={handleDropMain} onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }} onDragLeave={() => setIsDraggingOver(false)}>
                             <div className="flex flex-col lg:flex-row gap-2 flex-shrink-0 items-stretch">
@@ -411,14 +532,15 @@
                                             <div className="relative group cursor-pointer leader-fixed-size" onClick={() => handleCardClick(leaderCard, 'deck')} onContextMenu={(e) => {e.preventDefault(); removeEntireStack(leaderCard.id);}}>
                                                 {isMobile && (
                                                     <button 
-                                                        className="absolute top-0 right-0 bg-red-600/80 backdrop-blur-sm text-white w-5 h-5 flex items-center justify-center rounded-bl-lg shadow-md z-10 hover:bg-red-700 active:scale-90 transition-transform"
+                                                        className="absolute top-0 right-0 bg-red-600/80 backdrop-blur-sm text-white w-5 h-5 flex items-center justify-center rounded-bl-lg shadow-md z-30 hover:bg-red-700 active:scale-90 transition-transform"
                                                         onClick={(e) => { e.stopPropagation(); removeEntireStack(leaderCard.id); }}
                                                     >
                                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                                     </button>
                                                 )}
-                                                <img src={leaderCard.image} className="w-full rounded border border-[#2f2f2f] group-hover:border-red-500 shadow-md" />
-                                                <div className="hidden lg:flex absolute inset-0 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40"><button onClick={(e) => {e.stopPropagation(); removeFromDeck(leaderCard.id);}} className="count-ctrl-btn leader-remove-btn">✕</button></div>
+                                                {/* [統一體驗] 領袖區套用 SmartImage 防卡死 */}
+                                                <SmartImage src={leaderCard.image} alt={leaderCard.name} className="w-full rounded border border-[#2f2f2f] group-hover:border-red-500 shadow-md" />
+                                                <div className="hidden lg:flex absolute inset-0 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 z-30"><button onClick={(e) => {e.stopPropagation(); removeFromDeck(leaderCard.id);}} className="count-ctrl-btn leader-remove-btn">✕</button></div>
                                             </div>
                                         ) : (
                                             <div className="leader-fixed-size py-8 md:py-20 text-zinc-700 text-[10px] uppercase font-bold tracking-widest italic text-center border-2 border-dashed border-zinc-800/50 rounded">尚未選擇領袖</div>
@@ -428,12 +550,13 @@
                                 <StatsBlock stats={deckStats} isMobile={isMobile} />
                             </div>
 
-                            <div className="notion-panel flex flex-col lg:flex-1 lg:overflow-hidden bg-[#1c1c1c]">
+                            <div className="notion-panel flex flex-col flex-shrink-0 lg:flex-shrink lg:flex-1 lg:overflow-hidden bg-[#1c1c1c]">
                                 <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center justify-between flex-shrink-0 rounded-t-[3px]">
                                     <div className="flex items-center gap-3"><span className="panel-title">卡牌 (CARDS)</span>{!isDeckCompliant && (<div className="flex items-center gap-2 ml-4 py-0.5 px-3 bg-red-500/10 rounded border border-red-500/20"><span className="text-[11px] font-black text-red-500 animate-breathe whitespace-nowrap">{!isOathValid ? "⚠️ 與領袖誓約不符" : !isIpValid ? "⚠️ 牌組 IP 不可混搭" : "⚠️ 不符規定"}</span></div>)}</div>
                                     <div className="text-[11px] font-bold text-zinc-500 tracking-wider">數量: <span className={totalCardsInDeck > 40 ? 'text-red-500 animate-breathe' : 'text-zinc-200'}>{totalCardsInDeck}</span> <span className="text-zinc-600">/ 40</span></div>
                                 </div>
-                                <div className="p-5 bg-[#161618] lg:flex-1 lg:overflow-y-auto rounded-b-[3px] pb-4">
+                                {/* [優化] 卡牌區限制高度，超過內部滾動，不再擠壓 */}
+                                <div className="p-5 bg-[#161618] flex-1 overflow-y-auto rounded-b-[3px] max-h-[45vh] lg:max-h-none lg:overflow-y-auto">
                                     <div className="grid grid-cols-5 gap-1 lg:flex lg:flex-wrap lg:gap-2 content-start min-h-full"> 
                                         {normalCardsInDeck.map((item) => (
                                             <div key={item.id} className="relative group cursor-pointer card-fixed-size" draggable="true" 
@@ -443,36 +566,79 @@
                                                 onContextMenu={(e) => { e.preventDefault(); if(!isMobile) removeEntireStack(item.id); }}>
                                                 {isMobile && (
                                                     <button 
-                                                        className="absolute top-0 right-0 bg-red-600/80 backdrop-blur-sm text-white w-5 h-5 flex items-center justify-center rounded-bl-lg shadow-md z-10 hover:bg-red-700 active:scale-90 transition-transform"
+                                                        className="absolute top-0 right-0 bg-red-600/80 backdrop-blur-sm text-white w-5 h-5 flex items-center justify-center rounded-bl-lg shadow-md z-30 hover:bg-red-700 active:scale-90 transition-transform"
                                                         onClick={(e) => { e.stopPropagation(); removeEntireStack(item.id); }}
                                                     >
                                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                                     </button>
                                                 )}
 
-                                                <img src={item.image} className={`w-full h-full object-cover rounded border transition-all shadow-md ${item.attribute !== leaderCard?.attribute ? 'border-[3px] border-red-600 animate-breathe' : 'border-[#2f2f2f]'} group-hover:border-zinc-500`} />
+                                                {/* [統一體驗] 卡牌區套用 SmartImage 防卡死 */}
+                                                <SmartImage src={item.image} alt={item.name} className={`w-full h-full rounded border transition-all shadow-md ${item.attribute !== leaderCard?.attribute ? 'border-[3px] border-red-600 animate-breathe' : 'border-[#2f2f2f]'} group-hover:border-zinc-500`} />
                                                 
-                                                <div className="hidden lg:flex absolute inset-0 items-end justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 pb-3"><div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); removeFromDeck(item.id); }} className="count-ctrl-btn">–</button><div className={`bg-black/85 text-base font-black w-[34px] h-[34px] rounded-lg flex items-center justify-center shadow-lg border border-white/10 ${item.count > 3 ? 'text-red-500 animate-breathe' : 'text-white'}`}>{item.count}</div><button onClick={(e) => { e.stopPropagation(); addToDeck(item); }} className="count-ctrl-btn plus">+</button></div></div>
+                                                <div className="hidden lg:flex absolute inset-0 items-end justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 pb-3 z-30"><div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); removeFromDeck(item.id); }} className="count-ctrl-btn">–</button><div className={`bg-black/85 text-base font-black w-[34px] h-[34px] rounded-lg flex items-center justify-center shadow-lg border border-white/10 ${item.count > 3 ? 'text-red-500 animate-breathe' : 'text-white'}`}>{item.count}</div><button onClick={(e) => { e.stopPropagation(); addToDeck(item); }} className="count-ctrl-btn plus">+</button></div></div>
                                                 
-                                                <div className={`absolute lg:-bottom-1 lg:-right-1 bottom-0 right-0 bg-black/85 text-[10px] lg:text-base font-black w-4 h-4 lg:w-[34px] lg:h-[34px] rounded-tl lg:rounded-lg flex items-center justify-center shadow-2xl lg:group-hover:hidden backdrop-blur-sm border-t border-l border-white/10 lg:border-none ${item.count > 3 ? 'text-red-500 animate-breathe' : 'text-white'}`}>{item.count}</div>
+                                                <div className={`absolute lg:-bottom-1 lg:-right-1 bottom-0 right-0 bg-black/85 text-[10px] lg:text-base font-black w-4 h-4 lg:w-[34px] lg:h-[34px] rounded-tl lg:rounded-lg flex items-center justify-center shadow-2xl lg:group-hover:hidden backdrop-blur-sm border-t border-l border-white/10 lg:border-none z-30 ${item.count > 3 ? 'text-red-500 animate-breathe' : 'text-white'}`}>{item.count}</div>
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             </div>
                             
-                            {/* [修正 3] 墊高區塊確保最後一排不被擋住，但保持整體容器滾動 */}
-                            <div className="h-32 flex-shrink-0 lg:hidden" />
+                            <div className="h-24 flex-shrink-0 lg:hidden" />
                         </main>
 
-                        <aside className="hidden lg:flex w-[460px] notion-panel flex-col overflow-hidden bg-[#1c1c1c]" onDrop={handleDropDatabase}><div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌資料庫 (DATABASE)</span></div><FilterSection search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} toggleFilter={toggleFilter} ipOptions={ipOptions} seriesOptions={seriesOptions} /><div className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-x-3 gap-y-2 bg-[#161618] content-start">{filteredCards.map(card => (<div key={card.id} className="group cursor-pointer flex flex-col items-center" draggable="true" onDragStart={(e) => handleDragStart(e, card, 'database')} onClick={() => setSelectedCard(card)} onDoubleClick={() => addToDeck(card)}><div className="w-full relative"><img src={card.image} className="w-full rounded border border-[#2f2f2f] group-hover:border-zinc-500 transition-colors shadow-sm" /></div><div className="text-[9px] mt-1.5 w-full text-center text-zinc-400 font-medium truncate group-hover:text-white transition-colors">{card.name}</div></div>))}</div></aside>
+                        {/* PC 版資料庫 */}
+                        <aside className="hidden lg:flex w-[460px] notion-panel flex-col overflow-hidden bg-[#1c1c1c] flex-shrink-0"><div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌資料庫 (DATABASE)</span></div><FilterSection search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} toggleFilter={toggleFilter} ipOptions={ipOptions} seriesOptions={seriesOptions} />
+                            <div id="pc-db-scroll" className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-x-3 gap-y-2 bg-[#161618] content-start">
+                                {visibleCards.map(card => {
+                                    const deckCount = deck.find(i=>i.id===card.id)?.count || 0;
+                                    return (
+                                        <div key={card.id} className="group cursor-pointer flex flex-col items-center relative" draggable="true" onDragStart={(e) => handleDragStart(e, card, 'database')} onClick={() => handleCardClick(card, 'database')} onDoubleClick={() => addToDeck(card)}>
+                                            <SmartImage src={card.image} alt={card.name} className="w-full rounded border border-[#2f2f2f] group-hover:border-zinc-500 shadow-sm" />
+                                            {deckCount > 0 && <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-bl flex items-center justify-center shadow z-20">{deckCount}</div>}
+                                            <div className="text-[9px] mt-1.5 w-full text-center text-zinc-400 font-medium truncate group-hover:text-white transition-colors">{card.name}</div>
+                                        </div>
+                                    );
+                                })}
+                                {/* 載入更多按鈕 */}
+                                {displayLimit < filteredCards.length && (
+                                    <button onClick={loadMoreCards} className="col-span-4 mt-2 py-3 bg-[#2d2d30] border border-[#3a3a3a] text-zinc-300 rounded hover:bg-[#3a3a3a] hover:text-white text-[11px] font-bold transition-colors shadow-sm">
+                                        載入更多 (顯示 {visibleCards.length} / {filteredCards.length})
+                                    </button>
+                                )}
+                            </div>
+                        </aside>
                     </div>
 
                     <button className="lg:hidden fab" onClick={() => setShowMobileDB(true)}><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
 
-                    {showMobileDB && (<ModalOverlay onClose={() => setShowMobileDB(false)} title="新增卡牌" isMobile={isMobile}><FilterSection search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} toggleFilter={toggleFilter} ipOptions={ipOptions} seriesOptions={seriesOptions} /><div className="p-4 grid grid-cols-4 gap-2 bg-[#161618] content-start pb-32">{filteredCards.map(card => (<div key={card.id} className="relative cursor-pointer active:scale-95 transition-transform" onClick={() => handleCardClick(card, 'database')}><img src={card.image} className="w-full rounded border border-[#2f2f2f]" />{deck.find(i=>i.id===card.id) && (<div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-bl flex items-center justify-center shadow">{deck.find(i=>i.id===card.id).count}</div>)}<div className="text-[9px] mt-1 text-center text-zinc-400 truncate">{card.name}</div></div>))}</div></ModalOverlay>)}
+                    {/* Mobile 版資料庫 */}
+                    {showMobileDB && (
+                        <ModalOverlay scrollId="mobile-db-scroll" onClose={() => setShowMobileDB(false)} title="新增卡牌" isMobile={isMobile}>
+                            <FilterSection search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} toggleFilter={toggleFilter} ipOptions={ipOptions} seriesOptions={seriesOptions} />
+                            <div className="p-4 grid grid-cols-4 gap-2 bg-[#161618] content-start pb-32">
+                                {visibleCards.map(card => {
+                                    const deckCount = deck.find(i=>i.id===card.id)?.count || 0;
+                                    return (
+                                        <div key={card.id} className="relative cursor-pointer active:scale-95 transition-transform flex flex-col items-center" onClick={() => handleCardClick(card, 'database')}>
+                                            <SmartImage src={card.image} alt={card.name} className="w-full rounded border border-[#2f2f2f] shadow-sm" />
+                                            {deckCount > 0 && <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-bl flex items-center justify-center shadow z-20">{deckCount}</div>}
+                                            <div className="text-[9px] mt-1.5 w-full text-center text-zinc-400 font-medium truncate">{card.name}</div>
+                                        </div>
+                                    );
+                                })}
+                                {/* 載入更多按鈕 */}
+                                {displayLimit < filteredCards.length && (
+                                    <button onClick={loadMoreCards} className="col-span-4 mt-2 py-3 bg-[#2d2d30] border border-[#3a3a3a] text-zinc-300 rounded active:bg-[#3a3a3a] text-[11px] font-bold transition-colors shadow-sm">
+                                        載入更多 (顯示 {visibleCards.length} / {filteredCards.length})
+                                    </button>
+                                )}
+                            </div>
+                        </ModalOverlay>
+                    )}
 
-                    {showMobileDetail && selectedCard && (<ModalOverlay onClose={() => setShowMobileDetail(false)} title="卡牌詳情" isMobile={isMobile}><div className="flex flex-col h-full"><div className="flex-1 overflow-y-auto"><CardDetailContent card={selectedCard} isMobile={isMobile} /></div>{/* [修正 1] Footer Padding 修復: pb-safe + pt-2 */}<div className="p-4 bg-[#202020] border-t border-[#2f2f2f] flex items-center justify-between gap-4 flex-shrink-0 pb-safe pt-2 pb-2">{deck.find(i => i.id === selectedCard.id) ? (<><button onClick={() => removeFromDeck(selectedCard.id)} className="flex-1 bg-[#2d2d30] hover:bg-[#3a3a3a] text-white py-3 rounded font-bold flex items-center justify-center gap-2 active:bg-[#404040]"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg> 減少</button><span className="text-xl font-black w-10 text-center">{deck.find(i => i.id === selectedCard.id).count}</span><button onClick={() => addToDeck(selectedCard)} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded font-bold flex items-center justify-center gap-2 active:bg-red-800"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 增加</button></>) : (<button onClick={() => { addToDeck(selectedCard); setShowMobileDetail(false); }} className="w-full bg-red-600 text-white py-3 rounded font-bold active:bg-red-800">加入牌組</button>)}</div></div></ModalOverlay>)}
+                    {showMobileDetail && selectedCard && (<ModalOverlay onClose={() => setShowMobileDetail(false)} title="卡牌詳情" isMobile={isMobile}><div className="flex flex-col h-full"><div className="flex-1 overflow-y-auto"><CardDetailContent card={selectedCard} isMobile={isMobile} /></div><div className="p-4 bg-[#202020] border-t border-[#2f2f2f] flex items-center justify-between gap-4 flex-shrink-0 pb-safe pt-2 pb-2">{deck.find(i => i.id === selectedCard.id) ? (<><button onClick={() => removeFromDeck(selectedCard.id)} className="flex-1 bg-[#2d2d30] hover:bg-[#3a3a3a] text-white py-3 rounded font-bold flex items-center justify-center gap-2 active:bg-[#404040]"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg> 減少</button><span className="text-xl font-black w-10 text-center">{deck.find(i => i.id === selectedCard.id).count}</span><button onClick={() => addToDeck(selectedCard)} className="flex-1 bg-red-600 hover:bg-red-700 text-white py-3 rounded font-bold flex items-center justify-center gap-2 active:bg-red-800"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg> 增加</button></>) : (<button onClick={() => { addToDeck(selectedCard); setShowMobileDetail(false); }} className="w-full bg-red-600 text-white py-3 rounded font-bold active:bg-red-800">加入牌組</button>)}</div></div></ModalOverlay>)}
                 </div>
             );
         }
