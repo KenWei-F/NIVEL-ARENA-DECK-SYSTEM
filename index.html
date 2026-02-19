@@ -14,7 +14,7 @@
             color: #ffffff; 
             height: 100dvh;
             overflow: hidden; 
-            overscroll-behavior-y: none; 
+            overscroll-behavior-y: none; /* 防止 Chrome 原生下拉刷新干擾 */
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
             -webkit-tap-highlight-color: transparent;
             user-select: none;
@@ -156,25 +156,29 @@
             "黃": { name: "雷霆", icon: "images/Icon/ico_yellow.png" }
         };
 
-        /* [核心優化 1] 支援「快取破壞」的智慧圖片元件，根除 Timeout 卡死 */
+        /* [核心優化 1] 支援「快取破壞」的智慧圖片元件 (僅用於資料庫) */
         const SmartImage = memo(({ src, alt, className }) => {
             const [status, setStatus] = useState('loading'); 
             const [retryCount, setRetryCount] = useState(0); 
+            const imgRef = useRef(null);
 
-            // 當外部的 src 改變時，重置狀態
             useEffect(() => {
                 setStatus('loading');
                 setRetryCount(0);
             }, [src]);
 
+            useEffect(() => {
+                if (imgRef.current && imgRef.current.complete && imgRef.current.naturalWidth > 0) {
+                    setStatus('loaded');
+                }
+            }, [src, retryCount]);
+
             const handleRetry = (e) => {
                 e.stopPropagation();
                 setStatus('loading');
-                // 每次點擊增加計數器，強迫瀏覽器捨棄死鎖的快取，重新發起全新請求
-                setRetryCount(c => c + 1);
+                setRetryCount(c => c + 1); // 強迫重新連線
             };
 
-            // 產生帶有防快取參數的圖片來源
             const imageSrc = retryCount > 0 ? `${src}?retry=${retryCount}` : src;
 
             return (
@@ -196,9 +200,11 @@
                     )}
 
                     <img 
+                        ref={imgRef}
+                        key={retryCount}
                         src={imageSrc} 
                         alt={alt}
-                        loading="lazy" 
+                        loading="lazy" /* 回歸最穩定、不塞車的原生 lazy */
                         decoding="async"
                         className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-300 ${status === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
                         onLoad={() => setStatus('loaded')}
@@ -342,9 +348,9 @@
 
         const CardDetailContent = ({ card, isMobile }) => (
             <div className="p-4 space-y-5">
+                {/* [修復 2] 彈窗內不使用 SmartImage，直接顯示大圖，保證秒開不破圖 */}
                 <div className="rounded border border-[#2f2f2f] shadow-lg overflow-hidden bg-[#202020] flex justify-center">
-                    {/* [統一體驗] 詳情區也使用 SmartImage 提供一致的載入與重試體驗 */}
-                    <SmartImage src={card.image} alt={card.name} className={`${isMobile ? 'max-h-[35vh] w-auto' : 'max-w-full md:w-full'} h-auto object-contain rounded`} />
+                    <img src={card.image} alt={card.name || 'card'} className={`${isMobile ? 'max-h-[35vh] w-auto' : 'max-w-full md:w-full'} h-auto object-contain rounded`} />
                 </div>
                 <div className="flex flex-col gap-2"><h2 className="text-xl font-bold text-white leading-tight break-words">{card.name}</h2><div className="flex flex-wrap gap-1">{card.rarity?.map((r, i) => <span key={i} className="rarity-tag">{r}</span>)}</div><p className="text-[10px] font-mono text-zinc-500 uppercase">{card.id}</p></div>
                 <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold">{["attribute", "type", "cost", "power", "hit"].map(key => { const rawValue = card[key]; const isValid = rawValue !== null && rawValue !== undefined && rawValue !== ""; const displayValue = isValid ? rawValue : " - "; return (<div key={key} className="secondary-block p-2 flex justify-between items-center"><span className="text-zinc-400 uppercase">{key === "attribute" ? "屬性" : key === "type" ? "種類" : key === "cost" ? "cost" : key}</span><div className="flex items-center gap-2 text-zinc-100">{key === "attribute" && isValid ? (<div className="flex items-center gap-1.5">{ATTR_MAP[rawValue] && <img src={ATTR_MAP[rawValue].icon} className="attr-icon" />}<span>{ATTR_MAP[rawValue]?.name || rawValue}</span></div>) : <span>{displayValue}</span>}</div></div>); })}</div>
@@ -364,6 +370,7 @@
             const [canScrollLeft, setCanScrollLeft] = useState(false);
             const [canScrollRight, setCanScrollRight] = useState(true);
             
+            // [效能] 預設只顯示 20 張，保護網路通道
             const [displayLimit, setDisplayLimit] = useState(20);
 
             useEffect(() => { 
@@ -387,7 +394,17 @@
             const checkScroll = () => { if (navRef.current) { const { scrollLeft, scrollWidth, clientWidth } = navRef.current; setCanScrollLeft(scrollLeft > 0); setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 5); } };
             useEffect(() => { checkScroll(); window.addEventListener('resize', checkScroll); return () => window.removeEventListener('resize', checkScroll); }, []);
 
-            /* [修復 4] 篩選時強制重置資料庫與滾動條 */
+            // 防止背景滾動干擾
+            useEffect(() => {
+                if (isMobile && (showMobileDB || showMobileDetail || showAbout)) {
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    document.body.style.overflow = 'auto';
+                }
+                return () => { document.body.style.overflow = 'auto'; };
+            }, [isMobile, showMobileDB, showMobileDetail, showAbout]);
+
+            // [防卡死優化] 篩選時強制把捲軸拉回頂部
             useEffect(() => { 
                 setDisplayLimit(20); 
                 const mobileScroll = document.getElementById('mobile-db-scroll');
@@ -409,15 +426,12 @@
 
             const processCSVContent = (content) => { const lines = content.split('\n'); let newDeck = []; lines.forEach(line => { const parts = line.trim().split(','); if ((parts[0] === 'Leader' || parts[0] === 'ldeck') && parts[1]) { const card = cardDatabase.find(c => c.id === parts[1]); if (card) newDeck.push({ ...card, count: 1 }); } else if (parts[0] === 'Cards' || parts[0] === 'mdeck') { parts.slice(1).forEach(id => { const cardData = cardDatabase.find(c => c.id === id); if (cardData) { const idx = newDeck.findIndex(i => i.id === id); if (idx !== -1) newDeck[idx].count += 1; else newDeck.push({ ...cardData, count: 1 }); } }); } }); setDeck(newDeck); };
             
-            /* [核心修復 3] 切換牌組時瞬間清空畫面，搶佔下載頻寬，給予最快回饋 */
             const handleDeckListSelect = async (e) => { 
                 const val = e.target.value; 
                 setSelectedListValue(val); 
                 if (!val) return; 
-
-                // 瞬間清空牌組，中斷不必要的渲染，優先載入新牌組
-                setDeck([]);
-
+                // 瞬間清空牌組，強制終止原本圖片渲染，給予最高網速優先權
+                setDeck([]); 
                 if (val.startsWith("USER_")) { 
                     const deckIdx = parseInt(val.replace("USER_", "")); const userDeck = userDecks[deckIdx]; let newDeck = []; const lCard = cardDatabase.find(c => c.id === userDeck.leader); if (lCard) newDeck.push({ ...lCard, count: 1 }); userDeck.cards.forEach(id => { const cData = cardDatabase.find(c => c.id === id); if (cData) { const idx = newDeck.findIndex(i => i.id === id); if (idx !== -1) newDeck[idx].count += 1; else newDeck.push({ ...cData, count: 1 }); } }); setDeck(newDeck); 
                 } else { 
@@ -430,10 +444,12 @@
             const removeFromDeck = (id) => setDeck(prev => prev.reduce((acc, i) => i.id === id ? (i.count > 1 ? [...acc, {...i, count: i.count-1}] : acc) : [...acc, i], []));
             const removeEntireStack = (id) => setDeck(prev => prev.filter(item => item.id !== id));
             
-            /* [核心修復 2] 確保牌組內的卡片排在資料庫最前面，並各自按照 ID 排序 */
+            // [防呆重構] 確保 JSON 有缺 id 或 name 時不會導致 Crash (白畫面)
             const filteredCards = useMemo(() => { 
                 let result = cardDatabase.filter(card => { 
-                    const matchesSearch = card.name.includes(search) || card.id.includes(search); 
+                    const name = card.name || "";
+                    const id = card.id || "";
+                    const matchesSearch = name.includes(search) || id.includes(search); 
                     if (!matchesSearch) return false; 
                     if (filters.ip && card.ip !== filters.ip) return false; 
                     if (filters.series && card.series !== filters.series) return false; 
@@ -445,34 +461,31 @@
                         if (!filters.costs.includes(costStr)) return false; 
                     } 
                     if (filters.trigger !== null) { 
-                        const hasTrigger = card.trigger === true || (card.keywords && card.keywords.includes("Trigger")); 
+                        const hasTrigger = card.trigger === true || ((card.keywords || []).includes("Trigger")); 
                         if (filters.trigger !== hasTrigger) return false; 
                     } 
                     return true; 
                 }); 
 
-                // 將目前已選入牌組的卡片提取出來
+                // 牌組中的卡片強制提早排序 (共享快取)
                 const deckIds = new Set(deck.map(c => c.id));
-                if (leaderCard) deckIds.add(leaderCard.id);
+                if (leaderCard && leaderCard.id) deckIds.add(leaderCard.id);
 
                 const inDeck = [];
                 const outDeck = [];
 
                 result.forEach(c => {
-                    if (deckIds.has(c.id)) inDeck.push(c);
+                    if (c.id && deckIds.has(c.id)) inDeck.push(c);
                     else outDeck.push(c);
                 });
 
-                // 兩組各自以 ID 字母順序排序
-                inDeck.sort((a, b) => a.id.localeCompare(b.id));
-                outDeck.sort((a, b) => a.id.localeCompare(b.id));
+                inDeck.sort((a, b) => (a.id || "").localeCompare(b.id || ""));
+                outDeck.sort((a, b) => (a.id || "").localeCompare(b.id || ""));
 
-                return [...inDeck, ...outDeck]; // 合併，已選的在前
+                return [...inDeck, ...outDeck]; 
             }, [cardDatabase, search, filters, deck, leaderCard]);
             
             const visibleCards = useMemo(() => filteredCards.slice(0, displayLimit), [filteredCards, displayLimit]);
-
-            // [效能優化] 載入更多，完全取代容易出錯的無限滾動
             const loadMoreCards = () => setDisplayLimit(prev => prev + 20);
 
             const handleDragStart = (e, card, type) => { e.dataTransfer.setData("dragType", type); setDraggingId(card.id); setDraggedItemData(card); setHasPreviewInserted(false); };
@@ -495,7 +508,7 @@
             };
 
             return (
-                <div className="flex flex-col h-[100dvh] w-screen relative">
+                <div className="flex flex-col h-[100dvh] lg:overflow-hidden w-screen relative">
                     {showAbout && <ModalOverlay onClose={() => setShowAbout(false)} title="關於本工具 (ABOUT)" isMobile={isMobile}><AboutContent /></ModalOverlay>}
                     
                     <nav className="h-[68px] flex items-center px-4 justify-between notion-panel flex-shrink-0 m-2 mb-0">
@@ -538,8 +551,8 @@
                                                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
                                                     </button>
                                                 )}
-                                                {/* [統一體驗] 領袖區套用 SmartImage 防卡死 */}
-                                                <SmartImage src={leaderCard.image} alt={leaderCard.name} className="w-full rounded border border-[#2f2f2f] group-hover:border-red-500 shadow-md" />
+                                                {/* [保證秒開] 領袖區直接用一般圖片，確保 PC 的 Hover UI 不被 z-index 蓋過 */}
+                                                <img src={leaderCard.image} alt={leaderCard.name || "leader"} className="w-full rounded border border-[#2f2f2f] group-hover:border-red-500 shadow-md relative z-10" />
                                                 <div className="hidden lg:flex absolute inset-0 items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 z-30"><button onClick={(e) => {e.stopPropagation(); removeFromDeck(leaderCard.id);}} className="count-ctrl-btn leader-remove-btn">✕</button></div>
                                             </div>
                                         ) : (
@@ -555,7 +568,6 @@
                                     <div className="flex items-center gap-3"><span className="panel-title">卡牌 (CARDS)</span>{!isDeckCompliant && (<div className="flex items-center gap-2 ml-4 py-0.5 px-3 bg-red-500/10 rounded border border-red-500/20"><span className="text-[11px] font-black text-red-500 animate-breathe whitespace-nowrap">{!isOathValid ? "⚠️ 與領袖誓約不符" : !isIpValid ? "⚠️ 牌組 IP 不可混搭" : "⚠️ 不符規定"}</span></div>)}</div>
                                     <div className="text-[11px] font-bold text-zinc-500 tracking-wider">數量: <span className={totalCardsInDeck > 40 ? 'text-red-500 animate-breathe' : 'text-zinc-200'}>{totalCardsInDeck}</span> <span className="text-zinc-600">/ 40</span></div>
                                 </div>
-                                {/* [優化] 卡牌區限制高度，超過內部滾動，不再擠壓 */}
                                 <div className="p-5 bg-[#161618] flex-1 overflow-y-auto rounded-b-[3px] max-h-[45vh] lg:max-h-none lg:overflow-y-auto">
                                     <div className="grid grid-cols-5 gap-1 lg:flex lg:flex-wrap lg:gap-2 content-start min-h-full"> 
                                         {normalCardsInDeck.map((item) => (
@@ -573,8 +585,8 @@
                                                     </button>
                                                 )}
 
-                                                {/* [統一體驗] 卡牌區套用 SmartImage 防卡死 */}
-                                                <SmartImage src={item.image} alt={item.name} className={`w-full h-full rounded border transition-all shadow-md ${item.attribute !== leaderCard?.attribute ? 'border-[3px] border-red-600 animate-breathe' : 'border-[#2f2f2f]'} group-hover:border-zinc-500`} />
+                                                {/* [保證秒開] 牌組區直接使用一般圖片 */}
+                                                <img src={item.image} alt={item.name || "card"} className={`w-full h-full object-cover rounded border transition-all shadow-md relative z-10 ${item.attribute !== leaderCard?.attribute ? 'border-[3px] border-red-600 animate-breathe' : 'border-[#2f2f2f]'} group-hover:border-zinc-500`} />
                                                 
                                                 <div className="hidden lg:flex absolute inset-0 items-end justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 pb-3 z-30"><div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); removeFromDeck(item.id); }} className="count-ctrl-btn">–</button><div className={`bg-black/85 text-base font-black w-[34px] h-[34px] rounded-lg flex items-center justify-center shadow-lg border border-white/10 ${item.count > 3 ? 'text-red-500 animate-breathe' : 'text-white'}`}>{item.count}</div><button onClick={(e) => { e.stopPropagation(); addToDeck(item); }} className="count-ctrl-btn plus">+</button></div></div>
                                                 
@@ -589,21 +601,23 @@
                         </main>
 
                         {/* PC 版資料庫 */}
-                        <aside className="hidden lg:flex w-[460px] notion-panel flex-col overflow-hidden bg-[#1c1c1c] flex-shrink-0"><div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌資料庫 (DATABASE)</span></div><FilterSection search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} toggleFilter={toggleFilter} ipOptions={ipOptions} seriesOptions={seriesOptions} />
-                            <div id="pc-db-scroll" className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-x-3 gap-y-2 bg-[#161618] content-start">
+                        <aside className="hidden lg:flex w-[460px] notion-panel flex-col overflow-hidden bg-[#1c1c1c] flex-shrink-0">
+                            <div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌資料庫 (DATABASE)</span></div>
+                            <FilterSection search={search} setSearch={setSearch} filters={filters} setFilters={setFilters} toggleFilter={toggleFilter} ipOptions={ipOptions} seriesOptions={seriesOptions} />
+                            <div id="pc-db-scroll" className="flex-1 overflow-y-auto p-4 grid grid-cols-4 gap-x-3 gap-y-2 bg-[#161618] content-start relative">
                                 {visibleCards.map(card => {
                                     const deckCount = deck.find(i=>i.id===card.id)?.count || 0;
                                     return (
                                         <div key={card.id} className="group cursor-pointer flex flex-col items-center relative" draggable="true" onDragStart={(e) => handleDragStart(e, card, 'database')} onClick={() => handleCardClick(card, 'database')} onDoubleClick={() => addToDeck(card)}>
-                                            <SmartImage src={card.image} alt={card.name} className="w-full rounded border border-[#2f2f2f] group-hover:border-zinc-500 shadow-sm" />
-                                            {deckCount > 0 && <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-bl flex items-center justify-center shadow z-20">{deckCount}</div>}
+                                            <SmartImage src={card.image} alt={card.name || "card"} className="w-full rounded border border-[#2f2f2f] group-hover:border-zinc-500 shadow-sm" />
+                                            {deckCount > 0 && <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-bl flex items-center justify-center shadow z-30">{deckCount}</div>}
                                             <div className="text-[9px] mt-1.5 w-full text-center text-zinc-400 font-medium truncate group-hover:text-white transition-colors">{card.name}</div>
                                         </div>
                                     );
                                 })}
-                                {/* 載入更多按鈕 */}
+                                {/* [取代無限滾動] 載入更多按鈕，防塞車 */}
                                 {displayLimit < filteredCards.length && (
-                                    <button onClick={loadMoreCards} className="col-span-4 mt-2 py-3 bg-[#2d2d30] border border-[#3a3a3a] text-zinc-300 rounded hover:bg-[#3a3a3a] hover:text-white text-[11px] font-bold transition-colors shadow-sm">
+                                    <button onClick={loadMoreCards} className="col-span-4 mt-2 py-3 bg-[#2d2d30] border border-[#3a3a3a] text-zinc-300 rounded hover:bg-[#3a3a3a] hover:text-white text-[11px] font-bold transition-colors shadow-sm cursor-pointer active:bg-[#404040]">
                                         載入更多 (顯示 {visibleCards.length} / {filteredCards.length})
                                     </button>
                                 )}
@@ -622,15 +636,15 @@
                                     const deckCount = deck.find(i=>i.id===card.id)?.count || 0;
                                     return (
                                         <div key={card.id} className="relative cursor-pointer active:scale-95 transition-transform flex flex-col items-center" onClick={() => handleCardClick(card, 'database')}>
-                                            <SmartImage src={card.image} alt={card.name} className="w-full rounded border border-[#2f2f2f] shadow-sm" />
-                                            {deckCount > 0 && <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-bl flex items-center justify-center shadow z-20">{deckCount}</div>}
+                                            <SmartImage src={card.image} alt={card.name || "card"} className="w-full rounded border border-[#2f2f2f] shadow-sm" />
+                                            {deckCount > 0 && <div className="absolute top-0 right-0 bg-red-600 text-white text-[9px] font-bold w-4 h-4 rounded-bl flex items-center justify-center shadow z-30">{deckCount}</div>}
                                             <div className="text-[9px] mt-1.5 w-full text-center text-zinc-400 font-medium truncate">{card.name}</div>
                                         </div>
                                     );
                                 })}
                                 {/* 載入更多按鈕 */}
                                 {displayLimit < filteredCards.length && (
-                                    <button onClick={loadMoreCards} className="col-span-4 mt-2 py-3 bg-[#2d2d30] border border-[#3a3a3a] text-zinc-300 rounded active:bg-[#3a3a3a] text-[11px] font-bold transition-colors shadow-sm">
+                                    <button onClick={loadMoreCards} className="col-span-4 mt-2 py-3 bg-[#2d2d30] border border-[#3a3a3a] text-zinc-300 rounded active:bg-[#404040] text-[11px] font-bold transition-colors shadow-sm cursor-pointer">
                                         載入更多 (顯示 {visibleCards.length} / {filteredCards.length})
                                     </button>
                                 )}
