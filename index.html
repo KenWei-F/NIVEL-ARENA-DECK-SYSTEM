@@ -114,8 +114,14 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         
+        /* [核心優化] 加入硬體加速 (GPU Acceleration)，防止手機版動畫重繪吃滿效能 */
         @keyframes breathe-slow { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-        .animate-breathe { animation: breathe-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .animate-breathe { 
+            animation: breathe-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; 
+            will-change: opacity;
+            transform: translateZ(0); 
+            -webkit-transform: translateZ(0);
+        }
 
         @keyframes slide-hint-right { 0%, 100% { transform: translateX(0); opacity: 0.8; } 50% { transform: translateX(3px); opacity: 0.3; } }
         @keyframes slide-hint-left { 0%, 100% { transform: translateX(0); opacity: 0.8; } 50% { transform: translateX(-3px); opacity: 0.3; } }
@@ -279,6 +285,7 @@
                 </div>
                 <div><h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 border-b border-[#2f2f2f] pb-1">版本更新 (CHANGELOG)</h4>
                     <div className="space-y-2 pl-1">
+                        <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.8</span><span>改善警告動畫效能</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
                         <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.7</span><span>更新卡牌資料庫排序</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
                         <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.6</span><span>改善讀取效能</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
                         <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.5</span><span>響應式設計上線</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
@@ -577,7 +584,7 @@
                                                     </button>
                                                 )}
 
-                                                <img src={item.image} alt={item.name || "card"} className={`w-full h-full object-cover rounded border transition-all shadow-md relative z-10 ${item.attribute !== leaderCard?.attribute ? 'border-[3px] border-red-600 animate-breathe' : 'border-[#2f2f2f]'} group-hover:border-zinc-500`} />
+                                                <img src={item.image} alt={item.name || "card"} className={`w-full h-full object-cover rounded border transition-colors shadow-md relative z-10 ${item.attribute !== leaderCard?.attribute ? 'border-[3px] border-red-600 animate-breathe' : 'border-[#2f2f2f]'} group-hover:border-zinc-500`} />
                                                 
                                                 <div className="hidden lg:flex absolute inset-0 items-end justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 pb-3 z-30"><div className="flex items-center gap-2"><button onClick={(e) => { e.stopPropagation(); removeFromDeck(item.id); }} className="count-ctrl-btn">–</button><div className={`bg-black/85 text-base font-black w-[34px] h-[34px] rounded-lg flex items-center justify-center shadow-lg border border-white/10 ${item.count > 3 ? 'text-red-500 animate-breathe' : 'text-white'}`}>{item.count}</div><button onClick={(e) => { e.stopPropagation(); addToDeck(item); }} className="count-ctrl-btn plus">+</button></div></div>
                                                 
