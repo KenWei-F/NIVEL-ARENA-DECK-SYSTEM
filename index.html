@@ -21,9 +21,18 @@
             -webkit-user-select: none;
         }
 
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-thumb { background: #373737; border-radius: 10px; }
-        ::-webkit-scrollbar-track { background: transparent; }
+        /* PC 專用自訂捲軸 */
+        @media (min-width: 1024px) {
+            ::-webkit-scrollbar { width: 5px; height: 5px; }
+            ::-webkit-scrollbar-thumb { background: #373737; border-radius: 10px; }
+            ::-webkit-scrollbar-track { background: transparent; }
+        }
+
+        /* 行動裝置隱藏原生與自訂捲軸，維持 App 般乾淨的介面 */
+        @media (max-width: 1023px) {
+            ::-webkit-scrollbar { display: none; }
+            * { -ms-overflow-style: none; scrollbar-width: none; }
+        }
         
         .notion-panel { background-color: #202020; border: 1px solid #2f2f2f; border-radius: 4px; overflow: hidden; }
         .secondary-block { background-color: #2d2d30; border: 1px solid #3a3a3a; border-radius: 4px; }
@@ -310,7 +319,7 @@
                             {isMobile && <div className="modal-handle"></div>}
                             <div className={isMobile ? "text-center" : "flex justify-between items-center w-full"}><span className="panel-title text-sm">{title}</span>{!isMobile && <button onClick={onClose} className="text-zinc-400 font-bold p-2 hover:text-white">✕</button>}</div>
                         </div>
-                        <div id={scrollId} className="overflow-y-auto flex-1 h-full pb-safe no-anchor flex flex-col"> {children} </div>
+                        <div id={scrollId} className="overflow-y-auto flex-1 h-full pb-safe no-anchor flex flex-col no-scrollbar"> {children} </div>
                     </div>
                 </div>
             );
@@ -428,16 +437,33 @@
                             return <div key={lineIdx} className="h-1.5"></div>;
                         }
 
-                        const parts = content.split(/(【.*?】|\*\*.*?\*\*)/g);
+                        // 修改正則表達式，優先捕捉最內層的【】或是 **粗體**
+                        const parts = content.split(/(\*\*.*?\*\*|【[^【】]*】)/g).filter(Boolean);
+                        
                         const parsedContent = parts.map((part, i) => { 
                             if (part.startsWith('【') && part.endsWith('】')) { 
-                                const foundKey = Object.keys(KEYWORD_MAP).find(key => part.startsWith('【' + key)); 
-                                if (foundKey) return <span key={i} className="kw-badge" style={{backgroundColor: KEYWORD_MAP[foundKey]}}>{part}</span>; 
+                                const innerText = part.slice(1, -1);
+                                
+                                // 如果 KEYWORD_MAP 有定義這個詞，我們才給他標籤樣式
+                                if (KEYWORD_MAP[innerText]) {
+                                    return <span key={i} className="kw-badge" style={{backgroundColor: KEYWORD_MAP[innerText]}}>{part}</span>;
+                                }
+                                
+                                // 檢查是否是以定義的關鍵字開頭 (例如【入場：...】)
+                                const foundKey = Object.keys(KEYWORD_MAP).find(key => innerText.startsWith(key)); 
+                                if (foundKey) {
+                                    return <span key={i} className="kw-badge" style={{backgroundColor: KEYWORD_MAP[foundKey]}}>{part}</span>;
+                                }
+                                
+                                // 如果都不是，就只給普通的白字強調
                                 return <span key={i} className="plain-highlight">{part}</span>; 
                             } 
+                            
                             if (part.startsWith('**') && part.endsWith('**')) {
                                 return <strong key={i} className="text-white font-bold">{part.slice(2, -2)}</strong>;
                             }
+                            
+                            // 外層的普通文字
                             return <React.Fragment key={i}>{part}</React.Fragment>; 
                         });
 
@@ -457,46 +483,42 @@
         };
 
         const CardDetailContent = ({ card, isMobile }) => {
-            // 安全取得字串並排除 "-" 或空白
             const getValidStr = (val) => {
                 if (!val) return null;
                 const str = String(val).trim();
                 return (str === "" || str === "-") ? null : str;
             };
 
-            const classVal = getValidStr(card.class);
-            const affilVal = getValidStr(card.affiliation);
-            // 只有當兩者皆有值時，filter(Boolean) 才會留下兩個元素，此時 join(" / ") 才會加上斜線
+            // 使用可選串連確保 card 存在時才讀取屬性
+            const classVal = getValidStr(card?.class);
+            const affilVal = getValidStr(card?.affiliation);
             const classAndAffil = [classVal, affilVal].filter(Boolean).join(" / ");
             
             return (
                 <div className="p-4 space-y-5">
                     <div className="rounded border border-[#2f2f2f] shadow-lg overflow-hidden bg-[#202020] flex justify-center">
-                        <img src={card.image} alt={card.name || 'card'} className={`${isMobile ? 'max-h-[35vh] w-auto' : 'max-w-full md:w-full'} h-auto object-contain rounded`} />
+                        <img src={card?.image} alt={card?.name || 'card'} className={`${isMobile ? 'max-h-[35vh] w-auto' : 'max-w-full md:w-full'} h-auto object-contain rounded`} />
                     </div>
                     <div className="flex flex-col gap-2">
-                        <h2 className="text-xl font-bold text-white leading-tight break-words">{card.name}</h2>
+                        <h2 className="text-xl font-bold text-white leading-tight break-words">{card?.name}</h2>
                         
-                        {/* 類型與所屬 - 純文字顯示，單項無資料不顯示斜線，兩項皆無則不渲染 */}
                         {classAndAffil && (
                             <div className="text-[11px] font-bold text-zinc-400 tracking-wide">
                                 {classAndAffil}
                             </div>
                         )}
 
-                        {/* 稀有度與 ID */}
                         <div className="flex items-center gap-2">
                             <div className="flex flex-wrap gap-1">
-                                {card.rarity?.map((r, i) => <span key={i} className="rarity-tag">{r}</span>)}
+                                {card?.rarity?.map((r, i) => <span key={i} className="rarity-tag">{r}</span>)}
                             </div>
-                            <p className="text-[11px] font-mono text-zinc-500 uppercase leading-none font-bold">{card.id}</p>
+                            <p className="text-[11px] font-mono text-zinc-500 uppercase leading-none font-bold">{card?.id}</p>
                         </div>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold">
-                        {/* 從 Grid 中移除 "class_affiliation" */}
                         {["attribute", "type", "cost", "power", "hit"].map(key => { 
-                            const rawValue = card[key]; 
+                            const rawValue = card?.[key]; 
                             const isValid = rawValue !== null && rawValue !== undefined && rawValue !== "" && (Array.isArray(rawValue) ? rawValue.length > 0 : true); 
                             const displayValue = Array.isArray(rawValue) ? rawValue.join(" / ") : rawValue; 
                             
@@ -521,7 +543,7 @@
                             ); 
                         })}
                     </div>
-                    <div className="space-y-1"><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">技能效果</p><div>{card.effects?.map((text, idx) => <HighlightedText key={idx} text={text} />)}</div></div>
+                    <div className="space-y-1"><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">技能效果</p><div>{card?.effects?.map((text, idx) => <HighlightedText key={idx} text={text} />)}</div></div>
                 </div>
             );
         };
@@ -701,7 +723,8 @@
                     </nav>
 
                     <div className="flex flex-col lg:flex-row flex-1 p-2 gap-2 overflow-y-auto lg:overflow-hidden relative">
-                        <aside className="hidden lg:flex w-80 notion-panel flex-col overflow-hidden bg-[#1c1c1c] flex-shrink-0"><div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌詳情 (DETAILS)</span></div><div className="flex-1 overflow-y-auto">{selectedCard && <CardDetailContent card={selectedCard} />}</div></aside>
+                        {/* 修正了導致崩潰的區塊：加回了 {selectedCard && ...} 保護 */}
+                        <aside className="hidden lg:flex w-80 notion-panel flex-col overflow-hidden bg-[#1c1c1c] flex-shrink-0"><div className="h-9 px-4 border-b border-[#2f2f2f] bg-[#202020] flex items-center"><span className="panel-title">卡牌詳情 (DETAILS)</span></div><div className="flex-1 overflow-y-auto">{selectedCard && <CardDetailContent card={selectedCard} isMobile={false} />}</div></aside>
 
                         <main className="flex-1 flex flex-col gap-2 lg:overflow-hidden min-h-0" onDrop={handleDropMain} onDragOver={(e) => { e.preventDefault(); setIsDraggingOver(true); }} onDragLeave={() => setIsDraggingOver(false)}>
                             <div className="flex flex-col lg:flex-row gap-2 flex-shrink-0 items-stretch">
@@ -842,7 +865,7 @@
                     {showMobileDetail && selectedCard && (
                         <ModalOverlay onClose={() => setShowMobileDetail(false)} title="卡牌詳情" isMobile={isMobile}>
                             <div className="flex flex-col h-full">
-                                <div className="flex-1 overflow-y-auto"><CardDetailContent card={selectedCard} isMobile={isMobile} /></div>
+                                <div className="flex-1 overflow-y-auto no-scrollbar"><CardDetailContent card={selectedCard} isMobile={isMobile} /></div>
                                 <div className="p-4 bg-[#202020] border-t border-[#2f2f2f] flex flex-col items-center justify-center flex-shrink-0 pb-safe pt-4 pb-4">
                                     {deck.find(i => i.id === selectedCard.id) ? (
                                         <div className="flex items-center justify-center gap-8 w-full">
