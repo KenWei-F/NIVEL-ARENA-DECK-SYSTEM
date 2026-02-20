@@ -456,44 +456,75 @@
             );
         };
 
-        const CardDetailContent = ({ card, isMobile }) => (
-            <div className="p-4 space-y-5">
-                <div className="rounded border border-[#2f2f2f] shadow-lg overflow-hidden bg-[#202020] flex justify-center">
-                    <img src={card.image} alt={card.name || 'card'} className={`${isMobile ? 'max-h-[35vh] w-auto' : 'max-w-full md:w-full'} h-auto object-contain rounded`} />
-                </div>
-                <div className="flex flex-col gap-2"><h2 className="text-xl font-bold text-white leading-tight break-words">{card.name}</h2><div className="flex flex-wrap gap-1">{card.rarity?.map((r, i) => <span key={i} className="rarity-tag">{r}</span>)}</div><p className="text-[10px] font-mono text-zinc-500 uppercase">{card.id}</p></div>
-                
-                <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold">
-                    {["attribute", "type", "cost", "power", "hit", "affiliation"].map(key => { 
-                        const rawValue = card[key]; 
-                        const isValid = rawValue !== null && rawValue !== undefined && rawValue !== "" && (Array.isArray(rawValue) ? rawValue.length > 0 : true); 
-                        const displayValue = Array.isArray(rawValue) ? rawValue.join(" / ") : rawValue; 
+        const CardDetailContent = ({ card, isMobile }) => {
+            // 安全取得字串並排除 "-" 或空白
+            const getValidStr = (val) => {
+                if (!val) return null;
+                const str = String(val).trim();
+                return (str === "" || str === "-") ? null : str;
+            };
+
+            const classVal = getValidStr(card.class);
+            const affilVal = getValidStr(card.affiliation);
+            // 只有當兩者皆有值時，filter(Boolean) 才會留下兩個元素，此時 join(" / ") 才會加上斜線
+            const classAndAffil = [classVal, affilVal].filter(Boolean).join(" / ");
+            
+            return (
+                <div className="p-4 space-y-5">
+                    <div className="rounded border border-[#2f2f2f] shadow-lg overflow-hidden bg-[#202020] flex justify-center">
+                        <img src={card.image} alt={card.name || 'card'} className={`${isMobile ? 'max-h-[35vh] w-auto' : 'max-w-full md:w-full'} h-auto object-contain rounded`} />
+                    </div>
+                    <div className="flex flex-col gap-2">
+                        <h2 className="text-xl font-bold text-white leading-tight break-words">{card.name}</h2>
                         
-                        return (
-                            <div key={key} className="secondary-block p-2 flex justify-between items-center">
-                                <span className="text-zinc-400 uppercase">
-                                    {key === "attribute" ? "屬性" : 
-                                     key === "type" ? "種類" : 
-                                     key === "cost" ? "cost" : 
-                                     key === "affiliation" ? "所屬" : key}
-                                </span>
-                                <div className="flex items-center gap-2 text-zinc-100">
-                                    {key === "attribute" && isValid ? (
-                                        <div className="flex items-center gap-1.5">
-                                            {ATTR_MAP[rawValue] && <img src={ATTR_MAP[rawValue].icon} className="attr-icon" />}
-                                            <span>{ATTR_MAP[rawValue]?.name || rawValue}</span>
-                                        </div>
-                                    ) : (
-                                        <span>{isValid ? displayValue : " - "}</span>
-                                    )}
-                                </div>
+                        {/* 類型與所屬 - 純文字顯示，單項無資料不顯示斜線，兩項皆無則不渲染 */}
+                        {classAndAffil && (
+                            <div className="text-[11px] font-bold text-zinc-400 tracking-wide">
+                                {classAndAffil}
                             </div>
-                        ); 
-                    })}
+                        )}
+
+                        {/* 稀有度與 ID */}
+                        <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap gap-1">
+                                {card.rarity?.map((r, i) => <span key={i} className="rarity-tag">{r}</span>)}
+                            </div>
+                            <p className="text-[11px] font-mono text-zinc-500 uppercase leading-none font-bold">{card.id}</p>
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 text-[10px] font-semibold">
+                        {/* 從 Grid 中移除 "class_affiliation" */}
+                        {["attribute", "type", "cost", "power", "hit"].map(key => { 
+                            const rawValue = card[key]; 
+                            const isValid = rawValue !== null && rawValue !== undefined && rawValue !== "" && (Array.isArray(rawValue) ? rawValue.length > 0 : true); 
+                            const displayValue = Array.isArray(rawValue) ? rawValue.join(" / ") : rawValue; 
+                            
+                            return (
+                                <div key={key} className="secondary-block p-2 flex justify-between items-center">
+                                    <span className="text-zinc-400 uppercase">
+                                        {key === "attribute" ? "屬性" : 
+                                         key === "type" ? "種類" : 
+                                         key === "cost" ? "cost" : key}
+                                    </span>
+                                    <div className="flex items-center gap-2 text-zinc-100">
+                                        {key === "attribute" && isValid ? (
+                                            <div className="flex items-center gap-1.5">
+                                                {ATTR_MAP[rawValue] && <img src={ATTR_MAP[rawValue].icon} className="attr-icon" />}
+                                                <span>{ATTR_MAP[rawValue]?.name || rawValue}</span>
+                                            </div>
+                                        ) : (
+                                            <span>{isValid ? displayValue : " - "}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ); 
+                        })}
+                    </div>
+                    <div className="space-y-1"><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">技能效果</p><div>{card.effects?.map((text, idx) => <HighlightedText key={idx} text={text} />)}</div></div>
                 </div>
-                <div className="space-y-1"><p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">技能效果</p><div>{card.effects?.map((text, idx) => <HighlightedText key={idx} text={text} />)}</div></div>
-            </div>
-        );
+            );
+        };
 
         function App() {
             const [cardDatabase, setCardDatabase] = useState([]); const [deck, setDeck] = useState([]); const [search, setSearch] = useState(""); const [selectedCard, setSelectedCard] = useState(null);
@@ -645,7 +676,6 @@
                     
                     <nav className="h-[68px] flex items-center px-4 justify-between notion-panel flex-shrink-0 m-2 mb-0">
                         <div className="relative flex items-center h-full w-full overflow-hidden">
-                            {/* 將左、右滑動提示改為常駐渲染，但利用透明度控制顯示與隱藏，以確保 CSS 動畫時鐘同步 */}
                             <div className={`absolute left-0 top-0 bottom-0 w-6 pointer-events-none md:hidden flex items-center justify-start z-10 from-[#202020] via-[#202020]/90 to-transparent bg-gradient-to-r transition-opacity duration-300 ${canScrollLeft ? 'opacity-100' : 'opacity-0'}`}>
                                 <svg className="w-3 h-3 text-zinc-400 animate-slide-hint-left ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
                             </div>
