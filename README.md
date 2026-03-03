@@ -61,8 +61,8 @@
 
 ## 🔗 相關連結
 
-* **官方網站**：[Nivel Arena Official](http://nivelarena.co.kr/)
-* **繁中資料庫**：[NIVEL ARENA 繁體中文 Notion 資料庫](https://cake-forger-f35.notion.site/NIVEL-ARENA-20e969c79e03804cae50c7acd1f2662b) 
+* **[官方網站](http://nivelarena.co.kr/)**
+* **[繁中資料庫](https://cake-forger-f35.notion.site/NIVEL-ARENA-20e969c79e03804cae50c7acd1f2662b)**
 
 ---
 
