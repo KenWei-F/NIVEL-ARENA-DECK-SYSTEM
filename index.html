@@ -560,6 +560,9 @@
             const [canScrollLeft, setCanScrollLeft] = useState(false);
             const [canScrollRight, setCanScrollRight] = useState(true);
             const [displayLimit, setDisplayLimit] = useState(20);
+            
+            // 新增：用於記錄長按事件的計時器
+            const longPressTimerRef = useRef(null);
 
             useEffect(() => { 
                 const handleResize = () => setIsMobile(window.innerWidth < 1024); 
@@ -599,7 +602,6 @@
                 if (pcScroll) pcScroll.scrollTop = 0;
             }, [search, filters]);
 
-            // 計算當前牌組狀態 (包含計算 Trigger)
             const deckStats = useMemo(() => { const stats = { cost: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0, '7': 0, '8': 0 }, type: { Unit: 0, Skill: 0, Item: 0 }, trigger: 0 }; deck.filter(c => c.type !== "領袖").forEach(card => { const c = parseInt(card.cost) || 0; if (c <= 1) stats.cost['1'] += card.count; else if (c >= 8) stats.cost['8'] += card.count; else stats.cost[c.toString()] += card.count; if (card.type === "單位") stats.type.Unit += card.count; else if (card.type === "技能") stats.type.Skill += card.count; else if (card.type === "道具") stats.type.Item += card.count; const hasTrigger = card.trigger === true || (card.keywords && card.keywords.includes("Trigger")); if (hasTrigger) stats.trigger += card.count; }); return stats; }, [deck]);
             const totalCardsInDeck = useMemo(() => deck.filter(c => c.type !== "領袖").reduce((sum, item) => sum + item.count, 0), [deck]);
             const leaderCard = useMemo(() => deck.find(c => c.type === "領袖"), [deck]);
@@ -682,15 +684,12 @@
             
             const saveCurrentDeckToList = () => { if (deck.length === 0) return alert("請先配置牌組。"); const name = prompt("請輸入牌組名稱："); if (!name) return; const leader = deck.find(c => c.type === "領袖")?.id || ""; const others = deck.filter(c => c.type !== "領袖"); const cardIds = others.flatMap(c => Array(c.count).fill(c.id)); const newIdx = userDecks.length; setUserDecks(prev => [...prev, { name, leader, cards: cardIds }]); setSelectedListValue(`USER_${newIdx}`); alert(`「${name}」已新增至列表。`); };
             
-            // 修正：加入 Trigger 數量檢查
             const addToDeck = (card) => { 
-                // 檢查是否超過 40 張
                 if (card.type !== "領袖" && totalCardsInDeck >= 40) return; 
 
-                // 檢查如果加入的是 Trigger 卡，會不會超過 8 張
                 const isTriggerCard = card.trigger === true || (card.keywords && card.keywords.includes("Trigger"));
                 if (card.type !== "領袖" && isTriggerCard && deckStats.trigger >= 8) {
-                    return; // 達到 8 張 Trigger 就無法再加入
+                    return; 
                 }
 
                 setDeck(prev => { 
@@ -743,12 +742,10 @@
             const visibleCards = useMemo(() => filteredCards.slice(0, displayLimit), [filteredCards, displayLimit]);
             const loadMoreCards = () => setDisplayLimit(prev => prev + 20);
 
-            // 拖曳功能也需要補上 Trigger 檢查，以防用拖曳的方式破 8
             const handleDragEnter = (e, targetId) => { 
                 e.preventDefault(); 
                 if (!draggedItemData || draggingId === targetId) return; 
                 
-                // 拖曳時如果放入的是新卡片，也要檢查 Trigger
                 const isTriggerCard = draggedItemData.trigger === true || (draggedItemData.keywords && draggedItemData.keywords.includes("Trigger"));
                 
                 setDeck(prev => { 
@@ -764,7 +761,6 @@
                     } else if (toIdx !== -1 && !hasPreviewInserted) { 
                         if (prev.find(i => i.id === draggedItemData.id)?.count >= 3) return prev; 
                         
-                        // 拖曳插入新卡片時阻擋超過 8 張 Trigger
                         if (isTriggerCard && deckStats.trigger >= 8) return prev;
 
                         newDeck.splice(toIdx, 0, { ...draggedItemData, count: 1 }); 
@@ -789,8 +785,39 @@
                     if (source === 'deck') {
                         setShowMobileDetail(true);
                     } else if (source === 'database') {
+                        // 在資料庫中直接短按會加入牌組，不開啟詳情
                         addToDeck(card);
                     }
+                }
+            };
+
+            // 新增：行動端卡牌長按處理邏輯
+            const handleTouchStart = (card) => {
+                if (!isMobile) return;
+                longPressTimerRef.current = setTimeout(() => {
+                    // 觸發長按：震動回饋並開啟卡牌詳情
+                    if (navigator.vibrate) navigator.vibrate(50);
+                    setSelectedCard(card);
+                    setShowMobileDetail(true);
+                    longPressTimerRef.current = null; // 標記為已觸發
+                }, 500); // 500毫秒視為長按
+            };
+
+            const handleTouchMove = () => {
+                // 如果手指滑動了，取消長按計時
+                if (longPressTimerRef.current) {
+                    clearTimeout(longPressTimerRef.current);
+                    longPressTimerRef.current = null;
+                }
+            };
+
+            const handleTouchEnd = (e, card) => {
+                if (!isMobile) return;
+                // 如果計時器還在，代表沒有超過 500ms 就放開了 -> 視為短按 (加入牌組)
+                if (longPressTimerRef.current) {
+                    clearTimeout(longPressTimerRef.current);
+                    longPressTimerRef.current = null;
+                    handleCardClick(e, card, 'database');
                 }
             };
 
@@ -953,12 +980,22 @@
                                 {visibleCards.map(card => {
                                     const deckCount = deck.find(i=>i.id===card.id)?.count || 0;
                                     return (
-                                        <div key={card.id} className="relative cursor-pointer active:scale-95 transition-transform flex flex-col items-center" onClick={(e) => handleCardClick(e, card, 'database')}>
-                                            <div className="relative w-full">
+                                        // 修改：加入長按相關事件 (onTouchStart, onTouchMove, onTouchEnd)
+                                        // 並移除原先的 onClick 以防衝突
+                                        <div key={card.id} className="relative cursor-pointer active:scale-95 transition-transform flex flex-col items-center" 
+                                            onTouchStart={() => handleTouchStart(card)}
+                                            onTouchMove={handleTouchMove}
+                                            onTouchEnd={(e) => handleTouchEnd(e, card)}
+                                            // 為了相容某些可能沒有 touch 的行動裝置瀏覽器，保留 onClick 但只觸發短按邏輯
+                                            onClick={(e) => {
+                                                if (!isMobile) handleCardClick(e, card, 'database');
+                                            }}
+                                        >
+                                            <div className="relative w-full pointer-events-none">
                                                 <SmartImage src={card.image} alt={card.name || "card"} className="w-full rounded border border-[#2f2f2f] shadow-sm" />
                                                 {deckCount > 0 && <div className="absolute -top-1 -right-1 bg-[#ef4444] text-white text-[11px] font-bold w-[22px] h-[22px] rounded-full flex items-center justify-center shadow-md z-20 border border-white/20">{deckCount}</div>}
                                             </div>
-                                            <div className="text-[9px] mt-1.5 w-full text-center text-zinc-400 font-medium truncate">{card.name}</div>
+                                            <div className="text-[9px] mt-1.5 w-full text-center text-zinc-400 font-medium truncate pointer-events-none">{card.name}</div>
                                         </div>
                                     );
                                 })}
