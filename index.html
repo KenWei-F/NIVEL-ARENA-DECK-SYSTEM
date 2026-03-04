@@ -8,7 +8,6 @@
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         body { 
             background-color: #191919; 
@@ -347,10 +346,7 @@
                         </div>
                         <div className="space-y-2 pl-1">
                             <div className="flex justify-between items-center text-[12px] text-zinc-300">
-                                <div className="flex items-center gap-2">
-                                    <span className="version-tag">v1.0.1</span>
-                                    <span>牌組快照新增分享功能</span>
-                                </div>
+                                <div className="flex items-center gap-2"><span className="version-tag">v1.0.1</span><span>牌組快照新增分享功能</span></div>
                                 <span className="text-zinc-500 font-mono">2026/03/04</span>
                             </div>
                             
@@ -563,6 +559,7 @@
             const [displayLimit, setDisplayLimit] = useState(20);
             
             const longPressTimerRef = useRef(null);
+            
             const [isExporting, setIsExporting] = useState(false);
             const [snapshotData, setSnapshotData] = useState(null); 
 
@@ -824,393 +821,190 @@
                     return;
                 }
                 
-                if (isMobile && navigator.share) {
-                    setIsExporting(true);
-                    try {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        
-                        const scale = 2; 
-                        const cols = 4;
-                        const cardW = 180;
-                        const cardH = 252; 
-                        const gap = 16;
-                        const padding = 40;
-                        const headerH = 50;
-                        
-                        const exportCards = leaderCard ? [{...leaderCard, isLeader: true}, ...normalCardsInDeck] : normalCardsInDeck;
-                        const rows = Math.ceil(exportCards.length / cols);
-                        
-                        const w = padding * 2 + cardW * cols + gap * (cols - 1);
-                        const h = padding * 2 + headerH + 24 + cardH * rows + gap * (rows - 1);
-                        
-                        canvas.width = w * scale;
-                        canvas.height = h * scale;
-                        ctx.scale(scale, scale);
-                        
-                        const fontStack = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-
-                        ctx.fillStyle = '#161618';
-                        ctx.fillRect(0, 0, w, h);
-                        
-                        ctx.strokeStyle = '#202020';
-                        ctx.lineWidth = 12;
-                        ctx.strokeRect(6, 6, w - 12, h - 12);
-                        
-                        ctx.fillStyle = '#d4d4d8';
-                        ctx.font = `900 22px ${fontStack}`;
-                        ctx.textAlign = 'left';
-                        ctx.textBaseline = 'alphabetic';
-                        ctx.fillText('NIVEL ARENA DECK', padding, padding + 24);
-                        
-                        ctx.fillStyle = '#737373';
-                        ctx.font = `bold 12px ${fontStack}`;
-                        ctx.textAlign = 'right';
-                        ctx.fillText(`CARDS: ${totalCardsInDeck} / 40`, w - padding, padding + 24);
-                        
-                        ctx.beginPath();
-                        ctx.moveTo(padding, padding + 36);
-                        ctx.lineTo(w - padding, padding + 36);
-                        ctx.strokeStyle = '#2f2f2f';
-                        ctx.lineWidth = 2;
-                        ctx.stroke();
-
-                        const loadImage = (src) => new Promise((resolve) => {
-                            const img = new Image();
-                            img.crossOrigin = 'anonymous';
-                            img.onload = () => resolve(img);
-                            img.onerror = () => resolve(null);
-                            img.src = src;
-                        });
-                        
-                        const loadedImages = await Promise.all(exportCards.map(c => loadImage(c.image)));
-
-                        const drawRoundRectPath = (context, rx, ry, rw, rh, rradius) => {
-                            context.beginPath();
-                            context.moveTo(rx + rradius, ry);
-                            context.lineTo(rx + rw - rradius, ry);
-                            context.quadraticCurveTo(rx + rw, ry, rx + rw, ry + rradius);
-                            context.lineTo(rx + rw, ry + rh - rradius);
-                            context.quadraticCurveTo(rx + rw, ry + rh, rx + rw - rradius, ry + rh);
-                            context.lineTo(rx + rradius, ry + rh);
-                            context.quadraticCurveTo(rx, ry + rh, rx, ry + rh - rradius);
-                            context.lineTo(rx, ry + rradius);
-                            context.quadraticCurveTo(rx, ry, rx + rradius, ry);
-                            context.closePath();
-                        };
-
-                        for (let i = 0; i < exportCards.length; i++) {
-                            const card = exportCards[i];
-                            const img = loadedImages[i];
-                            const col = i % cols;
-                            const row = Math.floor(i / cols);
-                            
-                            const x = padding + col * (cardW + gap);
-                            const y = padding + headerH + 24 + row * (cardH + gap);
-                            
-                            if (img) {
-                                ctx.save();
-                                drawRoundRectPath(ctx, x, y, cardW, cardH, 4);
-                                ctx.clip();
-                                const imgAspect = img.width / img.height;
-                                const canvasAspect = cardW / cardH;
-                                let renderW, renderH, renderX, renderY;
-                                if (imgAspect < canvasAspect) {
-                                    renderW = cardW; renderH = cardW / imgAspect; renderX = x; renderY = y - (renderH - cardH) / 2;
-                                } else {
-                                    renderH = cardH; renderW = cardH * imgAspect; renderY = y; renderX = x - (renderW - cardW) / 2;
-                                }
-                                ctx.drawImage(img, renderX, renderY, renderW, renderH);
-                                ctx.restore();
-                            } else {
-                                ctx.fillStyle = '#2d2d30';
-                                drawRoundRectPath(ctx, x, y, cardW, cardH, 4);
-                                ctx.fill();
-                            }
-                            
-                            drawRoundRectPath(ctx, x, y, cardW, cardH, 4);
-                            ctx.strokeStyle = '#2f2f2f';
-                            ctx.lineWidth = 1;
-                            ctx.stroke();
-                            
-                            const drawBadge = (text, bg, color, bx, by, bw, bh, br, font) => {
-                                ctx.save();
-                                ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                                ctx.shadowBlur = 12;
-                                ctx.shadowOffsetY = 4;
-                                ctx.fillStyle = bg;
-                                drawRoundRectPath(ctx, bx, by, bw, bh, br);
-                                ctx.fill();
-                                ctx.restore(); 
-                                
-                                ctx.fillStyle = color;
-                                ctx.font = font;
-                                ctx.textAlign = 'center';
-                                ctx.textBaseline = 'middle';
-                                ctx.fillText(text, bx + bw / 2, by + bh / 2 + 1);
-                            };
-
-                            const badgeSize = 50; 
-                            const countText = card.isLeader ? '1' : card.count.toString();
-                            const countColor = (!card.isLeader && card.count > 3) ? '#ef4444' : '#ffffff';
-                            drawBadge(
-                                countText, 
-                                'rgba(0,0,0,0.9)', 
-                                countColor, 
-                                x + cardW - badgeSize + 6, 
-                                y + cardH - badgeSize + 6, 
-                                badgeSize, 
-                                badgeSize, 
-                                12, 
-                                `900 24px ${fontStack}`
-                            );
-                            
-                            if (card.isLeader) {
-                                ctx.font = `900 16px ${fontStack}`;
-                                const textMetrics = ctx.measureText('LEADER');
-                                const leaderW = textMetrics.width + 30; 
-                                const leaderH = 36;
-                                drawBadge(
-                                    'LEADER', 
-                                    '#16a34a', 
-                                    '#ffffff', 
-                                    x - 6, 
-                                    y - 6, 
-                                    leaderW, 
-                                    leaderH, 
-                                    10, 
-                                    `900 16px ${fontStack}`
-                                );
-                            }
-                        }
-                        
-                        const lCard = deck.find(c => c.type === "領袖");
-                        const others = deck.filter(c => c.type !== "領袖");
-                        let csvContent = `Leader,${lCard ? lCard.id : ""}\nCards,${others.flatMap(c => Array(c.count).fill(c.id)).join(",")}\n`;
-                        
-                        canvas.toBlob(async (blob) => {
-                            if (!blob) throw new Error("Canvas toBlob failed");
-                            
-                            const delimiter = "___NIVEL_ARENA_DECK_DATA___";
-                            const textBlob = new Blob([delimiter, csvContent], { type: 'text/plain' });
-                            const finalBlob = new Blob([blob, textBlob], { type: 'image/jpeg' });
-                            
-                            const file = new File([finalBlob], `deck_${new Date().getTime()}.jpg`, { type: 'image/jpeg' });
-
-                            if (navigator.canShare && navigator.canShare({ files: [file] })) {
-                                try {
-                                    await navigator.share({
-                                        files: [file],
-                                        title: 'NIVEL ARENA DECK',
-                                    });
-                                } catch (shareError) {
-                                    const link = document.createElement("a");
-                                    link.href = URL.createObjectURL(finalBlob);
-                                    link.download = file.name;
-                                    link.click();
-                                    URL.revokeObjectURL(link.href);
-                                }
-                            } else {
-                                const link = document.createElement("a");
-                                link.href = URL.createObjectURL(finalBlob);
-                                link.download = file.name;
-                                link.click();
-                                URL.revokeObjectURL(link.href);
-                            }
-                            
-                            setIsExporting(false);
-                        }, "image/jpeg", 0.8);
-                        
-                    } catch (err) {
-                        console.error("Export failed:", err);
-                        alert("輸出圖片失敗，請稍後重試。");
-                        setIsExporting(false);
-                    }
-                } else {
-                    setIsExporting(true);
+                setIsExporting(true);
+                
+                try {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
                     
-                    try {
-                        const canvas = document.createElement('canvas');
-                        const ctx = canvas.getContext('2d');
-                        
-                        const scale = 2; 
-                        const cols = 4;
-                        const cardW = 180;
-                        const cardH = 252; 
-                        const gap = 16;
-                        const padding = 40;
-                        const headerH = 50;
-                        
-                        const exportCards = leaderCard ? [{...leaderCard, isLeader: true}, ...normalCardsInDeck] : normalCardsInDeck;
-                        const rows = Math.ceil(exportCards.length / cols);
-                        
-                        const w = padding * 2 + cardW * cols + gap * (cols - 1);
-                        const h = padding * 2 + headerH + 24 + cardH * rows + gap * (rows - 1);
-                        
-                        canvas.width = w * scale;
-                        canvas.height = h * scale;
-                        ctx.scale(scale, scale);
-                        
-                        const fontStack = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+                    const scale = 2; 
+                    const cols = 4;
+                    const cardW = 180;
+                    const cardH = 252; 
+                    const gap = 16;
+                    const padding = 40;
+                    const headerH = 50;
+                    
+                    const exportCards = leaderCard ? [{...leaderCard, isLeader: true}, ...normalCardsInDeck] : normalCardsInDeck;
+                    const rows = Math.ceil(exportCards.length / cols);
+                    
+                    const w = padding * 2 + cardW * cols + gap * (cols - 1);
+                    const h = padding * 2 + headerH + 24 + cardH * rows + gap * (rows - 1);
+                    
+                    canvas.width = w * scale;
+                    canvas.height = h * scale;
+                    ctx.scale(scale, scale);
+                    
+                    const fontStack = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
 
-                        ctx.fillStyle = '#161618';
-                        ctx.fillRect(0, 0, w, h);
-                        
-                        ctx.strokeStyle = '#202020';
-                        ctx.lineWidth = 12;
-                        ctx.strokeRect(6, 6, w - 12, h - 12);
-                        
-                        ctx.fillStyle = '#d4d4d8';
-                        ctx.font = `900 22px ${fontStack}`;
-                        ctx.textAlign = 'left';
-                        ctx.textBaseline = 'alphabetic';
-                        ctx.fillText('NIVEL ARENA DECK', padding, padding + 24);
-                        
-                        ctx.fillStyle = '#737373';
-                        ctx.font = `bold 12px ${fontStack}`;
-                        ctx.textAlign = 'right';
-                        ctx.fillText(`CARDS: ${totalCardsInDeck} / 40`, w - padding, padding + 24);
-                        
-                        ctx.beginPath();
-                        ctx.moveTo(padding, padding + 36);
-                        ctx.lineTo(w - padding, padding + 36);
-                        ctx.strokeStyle = '#2f2f2f';
-                        ctx.lineWidth = 2;
-                        ctx.stroke();
+                    ctx.fillStyle = '#161618';
+                    ctx.fillRect(0, 0, w, h);
+                    
+                    ctx.strokeStyle = '#202020';
+                    ctx.lineWidth = 12;
+                    ctx.strokeRect(6, 6, w - 12, h - 12);
+                    
+                    ctx.fillStyle = '#d4d4d8';
+                    ctx.font = `900 22px ${fontStack}`;
+                    ctx.textAlign = 'left';
+                    ctx.textBaseline = 'alphabetic';
+                    ctx.fillText('NIVEL ARENA DECK', padding, padding + 24);
+                    
+                    ctx.fillStyle = '#737373';
+                    ctx.font = `bold 12px ${fontStack}`;
+                    ctx.textAlign = 'right';
+                    ctx.fillText(`CARDS: ${totalCardsInDeck} / 40`, w - padding, padding + 24);
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(padding, padding + 36);
+                    ctx.lineTo(w - padding, padding + 36);
+                    ctx.strokeStyle = '#2f2f2f';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
 
-                        const loadImage = (src) => new Promise((resolve) => {
-                            const img = new Image();
-                            img.crossOrigin = 'anonymous';
-                            img.onload = () => resolve(img);
-                            img.onerror = () => resolve(null);
-                            img.src = src;
-                        });
+                    const loadImage = (src) => new Promise((resolve) => {
+                        const img = new Image();
+                        img.crossOrigin = 'anonymous';
+                        img.onload = () => resolve(img);
+                        img.onerror = () => resolve(null);
+                        img.src = src;
+                    });
+                    
+                    const loadedImages = await Promise.all(exportCards.map(c => loadImage(c.image)));
+
+                    const drawRoundRectPath = (context, rx, ry, rw, rh, rradius) => {
+                        context.beginPath();
+                        context.moveTo(rx + rradius, ry);
+                        context.lineTo(rx + rw - rradius, ry);
+                        context.quadraticCurveTo(rx + rw, ry, rx + rw, ry + rradius);
+                        context.lineTo(rx + rw, ry + rh - rradius);
+                        context.quadraticCurveTo(rx + rw, ry + rh, rx + rw - rradius, ry + rh);
+                        context.lineTo(rx + rradius, ry + rh);
+                        context.quadraticCurveTo(rx, ry + rh, rx, ry + rh - rradius);
+                        context.lineTo(rx, ry + rradius);
+                        context.quadraticCurveTo(rx, ry, rx + rradius, ry);
+                        context.closePath();
+                    };
+
+                    for (let i = 0; i < exportCards.length; i++) {
+                        const card = exportCards[i];
+                        const img = loadedImages[i];
+                        const col = i % cols;
+                        const row = Math.floor(i / cols);
                         
-                        const loadedImages = await Promise.all(exportCards.map(c => loadImage(c.image)));
-
-                        const drawRoundRectPath = (context, rx, ry, rw, rh, rradius) => {
-                            context.beginPath();
-                            context.moveTo(rx + rradius, ry);
-                            context.lineTo(rx + rw - rradius, ry);
-                            context.quadraticCurveTo(rx + rw, ry, rx + rw, ry + rradius);
-                            context.lineTo(rx + rw, ry + rh - rradius);
-                            context.quadraticCurveTo(rx + rw, ry + rh, rx + rw - rradius, ry + rh);
-                            context.lineTo(rx + rradius, ry + rh);
-                            context.quadraticCurveTo(rx, ry + rh, rx, ry + rh - rradius);
-                            context.lineTo(rx, ry + rradius);
-                            context.quadraticCurveTo(rx, ry, rx + rradius, ry);
-                            context.closePath();
-                        };
-
-                        for (let i = 0; i < exportCards.length; i++) {
-                            const card = exportCards[i];
-                            const img = loadedImages[i];
-                            const col = i % cols;
-                            const row = Math.floor(i / cols);
-                            
-                            const x = padding + col * (cardW + gap);
-                            const y = padding + headerH + 24 + row * (cardH + gap);
-                            
-                            if (img) {
-                                ctx.save();
-                                drawRoundRectPath(ctx, x, y, cardW, cardH, 4);
-                                ctx.clip();
-                                const imgAspect = img.width / img.height;
-                                const canvasAspect = cardW / cardH;
-                                let renderW, renderH, renderX, renderY;
-                                if (imgAspect < canvasAspect) {
-                                    renderW = cardW; renderH = cardW / imgAspect; renderX = x; renderY = y - (renderH - cardH) / 2;
-                                } else {
-                                    renderH = cardH; renderW = cardH * imgAspect; renderY = y; renderX = x - (renderW - cardW) / 2;
-                                }
-                                ctx.drawImage(img, renderX, renderY, renderW, renderH);
-                                ctx.restore();
-                            } else {
-                                ctx.fillStyle = '#2d2d30';
-                                drawRoundRectPath(ctx, x, y, cardW, cardH, 4);
-                                ctx.fill();
-                            }
-                            
+                        const x = padding + col * (cardW + gap);
+                        const y = padding + headerH + 24 + row * (cardH + gap);
+                        
+                        if (img) {
+                            ctx.save();
                             drawRoundRectPath(ctx, x, y, cardW, cardH, 4);
-                            ctx.strokeStyle = '#2f2f2f';
-                            ctx.lineWidth = 1;
-                            ctx.stroke();
-                            
-                            const drawBadge = (text, bg, color, bx, by, bw, bh, br, font) => {
-                                ctx.save();
-                                ctx.shadowColor = 'rgba(0,0,0,0.5)';
-                                ctx.shadowBlur = 12;
-                                ctx.shadowOffsetY = 4;
-                                ctx.fillStyle = bg;
-                                drawRoundRectPath(ctx, bx, by, bw, bh, br);
-                                ctx.fill();
-                                ctx.restore(); 
-                                
-                                ctx.fillStyle = color;
-                                ctx.font = font;
-                                ctx.textAlign = 'center';
-                                ctx.textBaseline = 'middle';
-                                ctx.fillText(text, bx + bw / 2, by + bh / 2 + 1);
-                            };
-
-                            const badgeSize = 50; 
-                            const countText = card.isLeader ? '1' : card.count.toString();
-                            const countColor = (!card.isLeader && card.count > 3) ? '#ef4444' : '#ffffff';
-                            drawBadge(
-                                countText, 
-                                'rgba(0,0,0,0.9)', 
-                                countColor, 
-                                x + cardW - badgeSize + 6, 
-                                y + cardH - badgeSize + 6, 
-                                badgeSize, 
-                                badgeSize, 
-                                12, 
-                                `900 24px ${fontStack}`
-                            );
-                            
-                            if (card.isLeader) {
-                                ctx.font = `900 16px ${fontStack}`;
-                                const textMetrics = ctx.measureText('LEADER');
-                                const leaderW = textMetrics.width + 30; 
-                                const leaderH = 36;
-                                drawBadge(
-                                    'LEADER', 
-                                    '#16a34a', 
-                                    '#ffffff', 
-                                    x - 6, 
-                                    y - 6, 
-                                    leaderW, 
-                                    leaderH, 
-                                    10, 
-                                    `900 16px ${fontStack}`
-                                );
+                            ctx.clip();
+                            const imgAspect = img.width / img.height;
+                            const canvasAspect = cardW / cardH;
+                            let renderW, renderH, renderX, renderY;
+                            if (imgAspect < canvasAspect) {
+                                renderW = cardW; renderH = cardW / imgAspect; renderX = x; renderY = y - (renderH - cardH) / 2;
+                            } else {
+                                renderH = cardH; renderW = cardH * imgAspect; renderY = y; renderX = x - (renderW - cardW) / 2;
                             }
+                            ctx.drawImage(img, renderX, renderY, renderW, renderH);
+                            ctx.restore();
+                        } else {
+                            ctx.fillStyle = '#2d2d30';
+                            drawRoundRectPath(ctx, x, y, cardW, cardH, 4);
+                            ctx.fill();
                         }
                         
-                        const lCard = deck.find(c => c.type === "領袖");
-                        const others = deck.filter(c => c.type !== "領袖");
-                        let csvContent = `Leader,${lCard ? lCard.id : ""}\nCards,${others.flatMap(c => Array(c.count).fill(c.id)).join(",")}\n`;
+                        drawRoundRectPath(ctx, x, y, cardW, cardH, 4);
+                        ctx.strokeStyle = '#2f2f2f';
+                        ctx.lineWidth = 1;
+                        ctx.stroke();
                         
-                        canvas.toBlob((blob) => {
-                            if (!blob) throw new Error("Canvas toBlob failed");
+                        const drawBadge = (text, bg, color, bx, by, bw, bh, br, font) => {
+                            ctx.save();
+                            ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                            ctx.shadowBlur = 12;
+                            ctx.shadowOffsetY = 4;
+                            ctx.fillStyle = bg;
+                            drawRoundRectPath(ctx, bx, by, bw, bh, br);
+                            ctx.fill();
+                            ctx.restore(); 
                             
-                            const delimiter = "___NIVEL_ARENA_DECK_DATA___";
-                            const textBlob = new Blob([delimiter, csvContent], { type: 'text/plain' });
-                            const finalBlob = new Blob([blob, textBlob], { type: 'image/jpeg' });
-                            
-                            const link = document.createElement("a");
-                            link.href = URL.createObjectURL(finalBlob);
-                            link.download = `deck_${new Date().getTime()}.jpg`;
-                            link.click();
-                            URL.revokeObjectURL(link.href);
-                            setIsExporting(false);
-                        }, "image/jpeg", 0.8);
+                            ctx.fillStyle = color;
+                            ctx.font = font;
+                            ctx.textAlign = 'center';
+                            ctx.textBaseline = 'middle';
+                            ctx.fillText(text, bx + bw / 2, by + bh / 2 + 1);
+                        };
+
+                        const badgeSize = 50; 
+                        const countText = card.isLeader ? '1' : card.count.toString();
+                        const countColor = (!card.isLeader && card.count > 3) ? '#ef4444' : '#ffffff';
+                        drawBadge(
+                            countText, 
+                            'rgba(0,0,0,0.9)', 
+                            countColor, 
+                            x + cardW - badgeSize + 6, 
+                            y + cardH - badgeSize + 6, 
+                            badgeSize, 
+                            badgeSize, 
+                            12, 
+                            `900 24px ${fontStack}`
+                        );
                         
-                    } catch (err) {
-                        console.error("Export failed:", err);
-                        alert("輸出圖片失敗，請稍後重試。");
-                        setIsExporting(false);
+                        if (card.isLeader) {
+                            ctx.font = `900 16px ${fontStack}`;
+                            const textMetrics = ctx.measureText('LEADER');
+                            const leaderW = textMetrics.width + 30; 
+                            const leaderH = 36;
+                            drawBadge(
+                                'LEADER', 
+                                '#16a34a', 
+                                '#ffffff', 
+                                x - 6, 
+                                y - 6, 
+                                leaderW, 
+                                leaderH, 
+                                10, 
+                                `900 16px ${fontStack}`
+                            );
+                        }
                     }
+                    
+                    const lCard = deck.find(c => c.type === "領袖");
+                    const others = deck.filter(c => c.type !== "領袖");
+                    let csvContent = `Leader,${lCard ? lCard.id : ""}\nCards,${others.flatMap(c => Array(c.count).fill(c.id)).join(",")}\n`;
+                    
+                    canvas.toBlob(async (blob) => {
+                        if (!blob) throw new Error("Canvas toBlob failed");
+                        
+                        const delimiter = "___NIVEL_ARENA_DECK_DATA___";
+                        const textBlob = new Blob([delimiter, csvContent], { type: 'text/plain' });
+                        const finalBlob = new Blob([blob, textBlob], { type: 'image/jpeg' });
+                        
+                        const file = new File([finalBlob], `deck_${new Date().getTime()}.jpg`, { type: 'image/jpeg' });
+                        const url = URL.createObjectURL(finalBlob);
+                        
+                        // 統一觸發預覽彈窗 (不再直接分享或下載)
+                        setSnapshotData({ url, file });
+                        setIsExporting(false);
+                        
+                    }, "image/jpeg", 0.8);
+                    
+                } catch (err) {
+                    console.error("Export failed:", err);
+                    alert("擷取圖片失敗，請稍後重試。");
+                    setIsExporting(false);
                 }
             };
 
@@ -1457,7 +1251,7 @@
                         </ModalOverlay>
                     )}
 
-                    {/* 手機版快照預覽彈窗 */}
+                    {/* 快照預覽彈窗 */}
                     {snapshotData && (
                         <ModalOverlay onClose={() => { URL.revokeObjectURL(snapshotData.url); setSnapshotData(null); }} title="牌組快照預覽" isMobile={isMobile}>
                             <div className="flex flex-col h-full items-center p-5 pb-safe overflow-y-auto no-scrollbar bg-[#161618]">
