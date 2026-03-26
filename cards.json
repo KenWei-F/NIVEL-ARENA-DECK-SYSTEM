@@ -11720,7 +11720,7 @@
         "hit": null,
         "keywords": [],
         "sub_keywords": [],
-        "trigger": false,
+        "trigger": true,
         "linked_effect": [
             "手牌棄置",
             "抽牌",
