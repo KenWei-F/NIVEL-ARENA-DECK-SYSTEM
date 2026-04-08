@@ -11974,7 +11974,7 @@
             "等級連結"
         ],
         "sub_keywords": [],
-        "trigger": false,
+        "trigger": true,
         "linked_effect": [
             "命中增加",
             "單位棄置",
