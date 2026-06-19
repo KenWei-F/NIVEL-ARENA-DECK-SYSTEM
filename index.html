@@ -5,9 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>NIVEL ARENA DECK SYSTEM</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.23.6/babel.min.js"></script>
     <style>
         body { 
             background-color: #191919; 
@@ -164,7 +164,7 @@
 <body>
     <div id="root"></div>
 
-    <script type="text/babel">
+    <script type="text/babel" data-presets="react,env">
         const { useState, useEffect, useMemo, useRef, memo } = React;
 
         const DECK_LIST_FILES = [
@@ -346,12 +346,13 @@
                         </div>
                         <div className="space-y-2 pl-1">
                             <div className="flex justify-between items-center text-[12px] text-zinc-300">
-                                <div className="flex items-center gap-2"><span className="version-tag">v1.0.1</span><span>牌組快照新增分享功能</span></div>
-                                <span className="text-zinc-500 font-mono">2026/03/04</span>
+                                <div className="flex items-center gap-2"><span className="version-tag">v1.0.2</span><span>修正外部套件版本衝突導致的畫面載入異常</span></div>
+                                <span className="text-zinc-500 font-mono">2026/06/20</span>
                             </div>
                             
                             {isChangelogExpanded && (
                                 <div className="mt-2 space-y-2 border-t border-[#2f2f2f] pt-2">
+                                    <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v1.0.1</span><span>牌組快照新增分享功能</span></div><span className="text-zinc-500 font-mono">2026/03/04</span></div>
                                     <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v1.0.0</span><span>新增牌組快照與讀取、新增長按查看卡牌詳情</span></div><span className="text-zinc-500 font-mono">2026/03/03</span></div>
                                     <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.9</span><span>UI 視覺改善</span></div><span className="text-zinc-500 font-mono">2026/02/20</span></div>
                                     <div className="flex justify-between items-center text-[12px] text-zinc-300"><div className="flex items-center gap-2"><span className="version-tag">v0.9.8</span><span>修改牌組警告設計</span></div><span className="text-zinc-500 font-mono">2026/02/19</span></div>
